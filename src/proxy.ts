@@ -1,21 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createServerClient } from "@supabase/ssr";
 
-// ⚠️  Set ke false setelah setup Supabase & user selesai
 const PREVIEW_MODE = false;
 
-export async function middleware(request: NextRequest) {
-  // Bypass semua auth saat preview
+// Next.js 16: export harus bernama "proxy" (bukan "middleware")
+export async function proxy(request: NextRequest) {
   if (PREVIEW_MODE) return NextResponse.next();
 
   const { pathname } = request.nextUrl;
 
-  // Route publik — tidak perlu login
   if (pathname.startsWith("/login")) {
     return NextResponse.next();
   }
-
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { createServerClient } = require("@supabase/ssr");
 
   let supabaseResponse = NextResponse.next({ request });
 
