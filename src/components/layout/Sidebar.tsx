@@ -11,6 +11,7 @@ import {
   Store,
   Menu,
   X,
+  UtensilsCrossed,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -49,6 +50,12 @@ const navItems: NavItem[] = [
     href: "/laporan",
     icon: BarChart3,
     roles: ["owner"],
+  },
+  {
+    label: "Kantin",
+    href: "/kantin",
+    icon: UtensilsCrossed,
+    roles: ["owner", "kasir"],
   },
   {
     label: "Pengaturan",
