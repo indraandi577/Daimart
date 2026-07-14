@@ -1,11 +1,13 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Search, Scan } from "lucide-react";
 import { useState, useRef } from "react";
 import { Product } from "@/types";
 import { cn, formatRupiah } from "@/lib/utils";
 import { useProducts } from "@/lib/hooks/useProducts";
 import { useCategories } from "@/lib/hooks/useCategories";
+import BarcodeScanner from "./BarcodeScanner";
+import toast from "react-hot-toast";
 
 interface ProductSearchProps {
   onAddToCart: (product: Product) => void;
@@ -15,9 +17,25 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
   const [query, setQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState("all");
   const searchRef = useRef<HTMLInputElement>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const { products, loading: loadingProducts } = useProducts();
   const { categories, loading: loadingCat } = useCategories();
+
+  const handleBarcodeDetected = (barcode: string) => {
+    setScannerOpen(false);
+    // Cari produk berdasarkan barcode
+    const found = products.find((p) => p.barcode === barcode);
+    if (found) {
+      toast.success(`✅ ${found.name}`);
+      onAddToCart(found);
+    } else {
+      // Tidak ketemu → isi ke search box agar kasir bisa cari manual
+      setQuery(barcode);
+      toast(`Barcode: ${barcode} — produk tidak ditemukan`, { icon: "🔍" });
+    }
+    searchRef.current?.focus();
+  };
 
   const allCategories = [
     { id: "all", name: "Semua", icon: "🏪" },
@@ -36,21 +54,37 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
 
   return (
     <div className="card h-full flex flex-col overflow-hidden">
-      {/* Search bar */}
+      {/* Search bar + tombol scan */}
       <div className="p-3 border-b border-gray-100">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             ref={searchRef}
             type="text"
-            placeholder="Cari nama / scan barcode..."
+            placeholder="Cari nama / ketik barcode..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="input-base pl-9 text-sm py-2"
+            className="input-base pl-9 pr-10 text-sm py-2"
             autoFocus
           />
+          {/* Tombol buka kamera scanner */}
+          <button
+            onClick={() => setScannerOpen(true)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
+            title="Scan barcode"
+          >
+            <Scan className="w-4 h-4" />
+          </button>
         </div>
       </div>
+
+      {/* Scanner fullscreen */}
+      {scannerOpen && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
 
       {/* Kategori grid */}
       <div className="p-2 border-b border-gray-100">

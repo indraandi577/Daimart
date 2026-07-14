@@ -64,7 +64,7 @@ export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipM
           />
         </div>
 
-        {/* Daftar Snack */}
+        {/* Daftar Snack — scrollable */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <label className="label-base mb-0">Daftar Snack</label>
@@ -77,7 +77,8 @@ export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipM
             </button>
           </div>
 
-          <div className="space-y-3">
+          {/* Area scroll untuk snack list */}
+          <div className="max-h-80 overflow-y-auto pr-1 space-y-3">
             {snacks.map((snack, idx) => (
               <div key={idx} className="bg-gray-50 rounded-xl p-4 space-y-3">
                 <div className="flex items-center justify-between">
@@ -152,6 +153,10 @@ export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipM
               </div>
             ))}
           </div>
+          {/* Info jumlah snack */}
+          <p className="text-xs text-gray-400 mt-2 text-center">
+            {snacks.length} jenis snack · scroll ke bawah untuk melihat semua
+          </p>
         </div>
 
         <div className="flex gap-3 pt-1">
