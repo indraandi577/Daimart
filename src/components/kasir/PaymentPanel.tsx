@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Printer, RotateCcw, User, UserCheck, X } from "lucide-react";
+import { Printer, RotateCcw, User, UserCheck, X, Wallet } from "lucide-react";
 import { CartItem } from "@/types";
 import { formatRupiah, cn } from "@/lib/utils";
 import Button from "@/components/ui/Button";
@@ -21,18 +21,35 @@ const QUICK_AMOUNTS = [10000, 20000, 50000, 100000];
 export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: PaymentPanelProps) {
   const [paidAmount, setPaidAmount] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "qris" | "debit">("cash");
+
+  // Member state
   const [isMember, setIsMember] = useState(false);
   const [memberSearch, setMemberSearch] = useState("");
   const [memberResults, setMemberResults] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [searching, setSearching] = useState(false);
 
+  // Bayar pakai saldo wallet member
+  const [pakaiSaldo, setPakaiSaldo] = useState(false);
+
   const { submitTransaction, loading } = useTransaction();
   const { searchMember, catatTransaksiMember } = useMember();
 
+  // Hitung berapa dibayar saldo vs tunai
+  const saldoTersedia = selectedMember?.saldo ?? 0;
+  const bayarSaldo = pakaiSaldo ? Math.min(saldoTersedia, grandTotal) : 0;
+  const sisaTagihan = grandTotal - bayarSaldo;
   const paid = parseInt(paidAmount || "0", 10);
-  const change = paid - grandTotal;
-  const isValid = cart.length > 0 && (paymentMethod !== "cash" || paid >= grandTotal);
+  const change = paid - sisaTagihan;
+
+  // Validasi
+  const isValid = cart.length > 0 && (
+    pakaiSaldo && bayarSaldo >= grandTotal
+      ? true  // lunas full pakai saldo
+      : paymentMethod !== "cash"
+        ? true  // QRIS/debit → tidak perlu cek nominal
+        : paid >= sisaTagihan   // cash → harus cukup
+  );
 
   const handleMemberSearch = async (q: string) => {
     setMemberSearch(q);
@@ -44,6 +61,15 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
     } finally {
       setSearching(false);
     }
+  };
+
+  const resetForm = () => {
+    setPaidAmount("");
+    setSelectedMember(null);
+    setMemberSearch("");
+    setIsMember(false);
+    setPakaiSaldo(false);
+    setMemberResults([]);
   };
 
   const handlePay = async () => {
@@ -59,25 +85,37 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
       toast.error("Pilih member terlebih dahulu");
       return;
     }
+    if (pakaiSaldo && bayarSaldo <= 0) {
+      toast.error("Saldo tidak cukup");
+      return;
+    }
+
     try {
       const trx = await submitTransaction({
         cart,
         totalAmount: grandTotal,
-        paidAmount: paymentMethod === "cash" ? paid : grandTotal,
-        changeAmount: paymentMethod === "cash" ? change : 0,
-        paymentMethod,
+        paidAmount: pakaiSaldo && bayarSaldo >= grandTotal
+          ? grandTotal
+          : paymentMethod === "cash" ? paid : grandTotal,
+        changeAmount: pakaiSaldo && bayarSaldo >= grandTotal ? 0 : change,
+        paymentMethod: pakaiSaldo && bayarSaldo >= grandTotal ? "cash" : paymentMethod,
         kasirId,
       });
 
-      // Catat ke histori belanja member
+      // Catat ke histori member (semua jenis pembayaran)
       if (isMember && selectedMember && trx?.id) {
-        await catatTransaksiMember(selectedMember.id, trx.id, grandTotal);
+        await catatTransaksiMember({
+          memberId: selectedMember.id,
+          transactionId: trx.id,
+          totalAmount: grandTotal,
+          bayarSaldo: bayarSaldo,
+          bayarTunai: sisaTagihan > 0
+            ? (paymentMethod === "cash" ? paid : sisaTagihan)
+            : 0,
+        });
       }
 
-      setPaidAmount("");
-      setSelectedMember(null);
-      setMemberSearch("");
-      setIsMember(false);
+      resetForm();
       onSuccess();
     } catch (err) {
       toast.error((err as Error).message || "Transaksi gagal");
@@ -93,8 +131,11 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
           {formatRupiah(grandTotal)}
         </p>
         {selectedMember && (
-          <p className="text-green-200 text-xs mt-1">
-            👤 {selectedMember.nama}
+          <p className="text-green-200 text-xs mt-1">👤 {selectedMember.nama}</p>
+        )}
+        {bayarSaldo > 0 && (
+          <p className="text-green-100 text-xs mt-0.5">
+            🎫 Saldo: -{formatRupiah(bayarSaldo)} · Sisa: {formatRupiah(sisaTagihan)}
           </p>
         )}
       </div>
@@ -103,7 +144,7 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
       <div className="flex-shrink-0">
         <div className="grid grid-cols-2 gap-2">
           <button
-            onClick={() => { setIsMember(false); setSelectedMember(null); setMemberSearch(""); }}
+            onClick={() => { setIsMember(false); resetForm(); }}
             className={cn(
               "py-2 rounded-xl text-sm font-semibold transition-all border flex items-center justify-center gap-1.5",
               !isMember ? "bg-gray-700 text-white border-gray-700" : "bg-white text-gray-500 border-gray-200"
@@ -126,18 +167,58 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
         {isMember && (
           <div className="mt-2 space-y-2">
             {selectedMember ? (
-              <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
-                <div className="w-7 h-7 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold">
-                  {selectedMember.nama.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+              <div className="space-y-2">
+                {/* Info member terpilih */}
+                <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+                  <div className="w-7 h-7 rounded-full bg-blue-200 flex items-center justify-center text-blue-700 text-xs font-bold">
+                    {selectedMember.nama.split(" ").map((w) => w[0]).slice(0, 2).join("")}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-blue-800 truncate">{selectedMember.nama}</p>
+                    <p className="text-xs text-blue-500">
+                      {selectedMember.kode_member} · Saldo: {formatRupiah(selectedMember.saldo)}
+                    </p>
+                  </div>
+                  <button onClick={resetForm} className="text-blue-400 hover:text-blue-600">
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-blue-800 truncate">{selectedMember.nama}</p>
-                  <p className="text-xs text-blue-500">{selectedMember.kode_member}</p>
-                </div>
-                <button onClick={() => { setSelectedMember(null); setMemberSearch(""); }}
-                  className="text-blue-400 hover:text-blue-600">
-                  <X className="w-4 h-4" />
-                </button>
+
+                {/* Toggle pakai saldo */}
+                {selectedMember.saldo > 0 && (
+                  <button
+                    onClick={() => setPakaiSaldo(!pakaiSaldo)}
+                    className={cn(
+                      "w-full flex items-center justify-between px-3 py-2.5 rounded-xl border-2 text-sm transition-all",
+                      pakaiSaldo
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <Wallet className="w-4 h-4" />
+                      Pakai Saldo Wallet
+                    </span>
+                    <span className={cn(
+                      "text-xs font-semibold",
+                      pakaiSaldo ? "text-blue-100" : "text-blue-600"
+                    )}>
+                      {formatRupiah(selectedMember.saldo)}
+                    </span>
+                  </button>
+                )}
+
+                {/* Info jika saldo habis atau kurang */}
+                {pakaiSaldo && bayarSaldo < grandTotal && (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2 text-xs text-yellow-700">
+                    ⚠️ Saldo hanya cukup untuk {formatRupiah(bayarSaldo)}. Sisa {formatRupiah(sisaTagihan)} dibayar tunai/QRIS.
+                  </div>
+                )}
+                {pakaiSaldo && bayarSaldo >= grandTotal && (
+                  <div className="bg-green-50 border border-green-200 rounded-xl px-3 py-2 text-xs text-green-700">
+                    ✅ Saldo cukup! Belanja gratis pakai wallet.
+                  </div>
+                )}
               </div>
             ) : (
               <div className="relative">
@@ -164,9 +245,11 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
                         <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold flex-shrink-0">
                           {m.nama.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                         </div>
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium text-gray-800">{m.nama}</p>
-                          <p className="text-xs text-gray-400">{m.kode_member} · {m.jabatan ?? "—"}</p>
+                          <p className="text-xs text-gray-400">
+                            {m.kode_member} · Saldo: {formatRupiah(m.saldo)}
+                          </p>
                         </div>
                       </button>
                     ))}
@@ -181,29 +264,33 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
         )}
       </div>
 
-      {/* Metode Bayar */}
-      <div className="flex-shrink-0">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Metode Bayar</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(["cash", "qris", "debit"] as const).map((method) => (
-            <button
-              key={method}
-              onClick={() => setPaymentMethod(method)}
-              className={cn(
-                "py-2 rounded-xl text-xs font-semibold transition-all border",
-                paymentMethod === method
-                  ? "bg-green-600 text-white border-green-600"
-                  : "bg-white text-gray-600 border-gray-200 hover:border-green-300"
-              )}
-            >
-              {method === "cash" ? "💵 Tunai" : method === "qris" ? "📱 QRIS" : "💳 Debit"}
-            </button>
-          ))}
+      {/* Metode Bayar — hanya tampil kalau saldo tidak menutup semua */}
+      {!(pakaiSaldo && bayarSaldo >= grandTotal) && (
+        <div className="flex-shrink-0">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            {sisaTagihan < grandTotal ? `Metode Bayar Sisa ${formatRupiah(sisaTagihan)}` : "Metode Bayar"}
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {(["cash", "qris", "debit"] as const).map((method) => (
+              <button
+                key={method}
+                onClick={() => setPaymentMethod(method)}
+                className={cn(
+                  "py-2 rounded-xl text-xs font-semibold transition-all border",
+                  paymentMethod === method
+                    ? "bg-green-600 text-white border-green-600"
+                    : "bg-white text-gray-600 border-gray-200 hover:border-green-300"
+                )}
+              >
+                {method === "cash" ? "💵 Tunai" : method === "qris" ? "📱 QRIS" : "💳 Debit"}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Input Uang Bayar (cash) */}
-      {paymentMethod === "cash" && (
+      {/* Input uang bayar (cash, kalau saldo tidak full) */}
+      {paymentMethod === "cash" && !(pakaiSaldo && bayarSaldo >= grandTotal) && (
         <div className="space-y-2 flex-shrink-0">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Uang Dibayar</p>
           <div className="relative">
@@ -228,12 +315,14 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
               </button>
             ))}
             <button
-              onClick={() => setPaidAmount(String(grandTotal))}
+              onClick={() => setPaidAmount(String(sisaTagihan))}
               className="col-span-2 py-2 rounded-xl text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
             >
-              Uang Pas
+              Uang Pas ({formatRupiah(sisaTagihan)})
             </button>
           </div>
+
+          {/* Kembalian */}
           <div className={cn(
             "rounded-xl p-3 text-center transition-colors",
             change >= 0 && paid > 0 ? "bg-green-50 border border-green-200" : "bg-gray-50 border border-gray-100"
@@ -246,14 +335,14 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
         </div>
       )}
 
-      {paymentMethod !== "cash" && (
+      {paymentMethod !== "cash" && !(pakaiSaldo && bayarSaldo >= grandTotal) && (
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-gray-400">
             <p className="text-4xl mb-2">{paymentMethod === "qris" ? "📱" : "💳"}</p>
             <p className="text-sm font-medium">
               {paymentMethod === "qris" ? "Tunjukkan QR ke pelanggan" : "Gesek/tap kartu"}
             </p>
-            <p className="text-xl font-black text-gray-700 mt-2">{formatRupiah(grandTotal)}</p>
+            <p className="text-xl font-black text-gray-700 mt-2">{formatRupiah(sisaTagihan)}</p>
           </div>
         </div>
       )}
@@ -270,19 +359,16 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
           className="w-full text-base py-4 rounded-2xl"
         >
           <Printer className="w-5 h-5" />
-          BAYAR &amp; CETAK STRUK
+          {pakaiSaldo && bayarSaldo >= grandTotal
+            ? "BAYAR PAKAI SALDO"
+            : "BAYAR & CETAK STRUK"
+          }
         </Button>
         <button
-          onClick={() => {
-            setPaidAmount("");
-            setSelectedMember(null);
-            setMemberSearch("");
-            toast("Pembayaran direset", { icon: "🔄" });
-          }}
+          onClick={resetForm}
           className="flex items-center justify-center gap-1.5 w-full py-2 text-xs text-gray-400 hover:text-gray-600 transition-colors"
         >
-          <RotateCcw className="w-3.5 h-3.5" />
-          Reset
+          <RotateCcw className="w-3.5 h-3.5" /> Reset
         </button>
       </div>
     </div>

@@ -9,34 +9,39 @@ export interface Member {
   nama: string;
   kode_member: string;
   jabatan: string | null;
-  voucher_bulanan: number;
+  topup_bulanan: number;
+  saldo: number;
   is_active: boolean;
   created_at: string;
-  // computed
+  // computed dari joins
   total_transaksi?: number;
   total_belanja?: number;
 }
 
-export interface MemberVoucher {
+export interface MemberTopup {
   id: string;
   member_id: string;
+  nominal: number;
   bulan: number;
   tahun: number;
-  nominal: number;
-  status: "belum" | "sudah";
-  diambil_at: string | null;
+  keterangan: string | null;
+  created_at: string;
+}
+
+export interface MemberTransaction {
+  id: string;
+  member_id: string;
+  transaction_id: string | null;
+  total_amount: number;
+  bayar_saldo: number;
+  bayar_tunai: number;
+  created_at: string;
 }
 
 export interface MemberDetail extends Member {
-  vouchers: MemberVoucher[];
-  recent_transactions: {
-    id: string;
-    total_amount: number;
-    created_at: string;
-  }[];
+  topups: MemberTopup[];
+  transactions: MemberTransaction[];
 }
-
-const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
 
 export function useMember() {
   const [members, setMembers] = useState<Member[]>([]);
@@ -46,6 +51,7 @@ export function useMember() {
   const now = new Date();
   const bulanIni = now.getMonth() + 1;
   const tahunIni = now.getFullYear();
+  const BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
 
   // ── Fetch semua member + stats ───────────────────────────
   const fetchMembers = useCallback(async () => {
@@ -55,28 +61,26 @@ export function useMember() {
         .from("members")
         .select("*")
         .order("nama");
-
       if (error) throw error;
 
-      // Hitung total transaksi per member
-      const memberIds = (data ?? []).map((m) => m.id);
-      if (memberIds.length > 0) {
+      const ids = (data ?? []).map((m) => m.id);
+      if (ids.length > 0) {
         const { data: trxData } = await supabase
           .from("member_transactions")
           .select("member_id, total_amount")
-          .in("member_id", memberIds);
+          .in("member_id", ids);
 
-        const statsMap: Record<string, { total_transaksi: number; total_belanja: number }> = {};
+        const stats: Record<string, { total_transaksi: number; total_belanja: number }> = {};
         trxData?.forEach((t) => {
-          if (!statsMap[t.member_id]) statsMap[t.member_id] = { total_transaksi: 0, total_belanja: 0 };
-          statsMap[t.member_id].total_transaksi += 1;
-          statsMap[t.member_id].total_belanja += t.total_amount;
+          if (!stats[t.member_id]) stats[t.member_id] = { total_transaksi: 0, total_belanja: 0 };
+          stats[t.member_id].total_transaksi++;
+          stats[t.member_id].total_belanja += t.total_amount;
         });
 
         setMembers((data ?? []).map((m) => ({
           ...m,
-          total_transaksi: statsMap[m.id]?.total_transaksi ?? 0,
-          total_belanja: statsMap[m.id]?.total_belanja ?? 0,
+          total_transaksi: stats[m.id]?.total_transaksi ?? 0,
+          total_belanja: stats[m.id]?.total_belanja ?? 0,
         })));
       } else {
         setMembers(data ?? []);
@@ -88,67 +92,57 @@ export function useMember() {
     }
   }, [supabase]);
 
-  // ── Fetch detail member ──────────────────────────────────
-  const fetchMemberDetail = async (memberId: string): Promise<MemberDetail | null> => {
+  // ── Detail member ────────────────────────────────────────
+  const fetchMemberDetail = useCallback(async (memberId: string): Promise<MemberDetail | null> => {
     const { data: member } = await supabase
-      .from("members")
-      .select("*")
-      .eq("id", memberId)
-      .single();
-
+      .from("members").select("*").eq("id", memberId).single();
     if (!member) return null;
 
-    const { data: vouchers } = await supabase
-      .from("member_vouchers")
-      .select("*")
+    const { data: topups } = await supabase
+      .from("member_topups").select("*")
       .eq("member_id", memberId)
       .order("tahun", { ascending: false })
       .order("bulan", { ascending: false })
-      .limit(12);
+      .limit(24);
 
     const { data: trxData } = await supabase
-      .from("member_transactions")
-      .select("id, total_amount, created_at")
+      .from("member_transactions").select("*")
       .eq("member_id", memberId)
       .order("created_at", { ascending: false })
-      .limit(10);
+      .limit(20);
 
     return {
       ...member,
       total_transaksi: trxData?.length ?? 0,
       total_belanja: trxData?.reduce((s, t) => s + t.total_amount, 0) ?? 0,
-      vouchers: (vouchers ?? []) as MemberVoucher[],
-      recent_transactions: trxData ?? [],
+      topups: (topups ?? []) as MemberTopup[],
+      transactions: (trxData ?? []) as MemberTransaction[],
     };
-  };
+  }, [supabase]);
 
-  // ── Cari member untuk POS ────────────────────────────────
+  // ── Cari member (untuk POS) ──────────────────────────────
   const searchMember = async (query: string): Promise<Member[]> => {
     const { data } = await supabase
-      .from("members")
-      .select("*")
+      .from("members").select("*")
       .eq("is_active", true)
       .or(`nama.ilike.%${query}%,kode_member.ilike.%${query}%`)
       .limit(10);
     return data ?? [];
   };
 
-  // ── Tambah member ────────────────────────────────────────
+  // ── Tambah member baru ───────────────────────────────────
   const tambahMember = async (data: {
     nama: string;
     jabatan?: string;
-    voucher_bulanan: number;
+    topup_bulanan: number;
   }) => {
-    // Generate kode member otomatis
     const { count } = await supabase
-      .from("members")
-      .select("id", { count: "exact", head: true });
+      .from("members").select("id", { count: "exact", head: true });
     const kode = `MBR-${String((count ?? 0) + 1).padStart(3, "0")}`;
 
-    const { error } = await supabase
-      .from("members")
-      .insert({ ...data, kode_member: kode });
-
+    const { error } = await supabase.from("members").insert({
+      ...data, kode_member: kode, saldo: 0,
+    });
     if (error) throw new Error(error.message);
     toast.success(`Member ${data.nama} ditambahkan (${kode})`);
     await fetchMembers();
@@ -156,72 +150,87 @@ export function useMember() {
 
   // ── Update member ────────────────────────────────────────
   const updateMember = async (id: string, data: Partial<Member>) => {
-    const { error } = await supabase
-      .from("members")
-      .update(data)
-      .eq("id", id);
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { total_transaksi, total_belanja, ...updateData } = data as Member;
+    const { error } = await supabase.from("members").update(updateData).eq("id", id);
     if (error) throw new Error(error.message);
     await fetchMembers();
   };
 
-  // ── Catat transaksi member dari POS ─────────────────────
-  const catatTransaksiMember = async (
-    memberId: string,
-    transactionId: string,
-    totalAmount: number
-  ) => {
-    await supabase.from("member_transactions").insert({
+  // ── Top up saldo manual 1 member ─────────────────────────
+  const topupManual = async (memberId: string, nominal: number, keterangan: string, kasirId: string) => {
+    // Insert riwayat
+    const { error: topupErr } = await supabase.from("member_topups").insert({
       member_id: memberId,
-      transaction_id: transactionId,
-      total_amount: totalAmount,
+      nominal,
+      bulan: bulanIni,
+      tahun: tahunIni,
+      keterangan,
+      oleh: kasirId,
     });
+    if (topupErr) throw new Error(topupErr.message);
+
+    // Tambah saldo
+    const { data: current } = await supabase.from("members").select("saldo").eq("id", memberId).single();
+    const { error: updateErr } = await supabase.from("members")
+      .update({ saldo: (current?.saldo ?? 0) + nominal })
+      .eq("id", memberId);
+    if (updateErr) throw new Error(updateErr.message);
+
+    toast.success(`Saldo berhasil ditambahkan: Rp ${nominal.toLocaleString("id-ID")}`);
+    await fetchMembers();
   };
 
-  // ── Generate voucher bulan ini ───────────────────────────
-  const generateVoucherBulanIni = async () => {
-    const { data, error } = await supabase.rpc("generate_voucher_bulanan", {
+  // ── Top up otomatis semua member bulan ini ───────────────
+  const topupBulananOtomatis = async () => {
+    const { data, error } = await supabase.rpc("topup_saldo_bulanan", {
       p_bulan: bulanIni,
       p_tahun: tahunIni,
     });
     if (error) throw new Error(error.message);
-    toast.success(`${data} voucher berhasil di-generate untuk ${BULAN[bulanIni - 1]} ${tahunIni}`);
+    toast.success(`${data} member berhasil di-top up untuk ${BULAN[bulanIni - 1]} ${tahunIni}`);
+    await fetchMembers();
     return data as number;
   };
 
-  // ── Ambil/redeem voucher ─────────────────────────────────
-  const redeemVoucher = async (voucherId: string, kasirId: string) => {
-    const { error } = await supabase
-      .from("member_vouchers")
-      .update({
-        status: "sudah",
-        diambil_at: new Date().toISOString(),
-        diambil_oleh: kasirId,
-      })
-      .eq("id", voucherId)
-      .eq("status", "belum"); // pastikan belum diambil
+  // ── Catat transaksi member (dari POS) ────────────────────
+  const catatTransaksiMember = async ({
+    memberId,
+    transactionId,
+    totalAmount,
+    bayarSaldo,
+    bayarTunai,
+  }: {
+    memberId: string;
+    transactionId: string;
+    totalAmount: number;
+    bayarSaldo: number;
+    bayarTunai: number;
+  }) => {
+    // Insert riwayat transaksi member
+    await supabase.from("member_transactions").insert({
+      member_id: memberId,
+      transaction_id: transactionId,
+      total_amount: totalAmount,
+      bayar_saldo: bayarSaldo,
+      bayar_tunai: bayarTunai,
+    });
 
-    if (error) throw new Error(error.message);
-    toast.success("Voucher berhasil di-redeem");
-  };
-
-  // ── Voucher member bulan ini ─────────────────────────────
-  const getVoucherBulanIni = async (memberId: string): Promise<MemberVoucher | null> => {
-    const { data } = await supabase
-      .from("member_vouchers")
-      .select("*")
-      .eq("member_id", memberId)
-      .eq("bulan", bulanIni)
-      .eq("tahun", tahunIni)
-      .single();
-    return data as MemberVoucher | null;
+    // Kurangi saldo kalau ada bayar pakai saldo
+    if (bayarSaldo > 0) {
+      const { data: current } = await supabase
+        .from("members").select("saldo").eq("id", memberId).single();
+      const newSaldo = Math.max(0, (current?.saldo ?? 0) - bayarSaldo);
+      await supabase.from("members").update({ saldo: newSaldo }).eq("id", memberId);
+    }
   };
 
   return {
     members, loading,
     fetchMembers, fetchMemberDetail,
     searchMember, tambahMember, updateMember,
-    catatTransaksiMember, generateVoucherBulanIni,
-    redeemVoucher, getVoucherBulanIni,
+    topupManual, topupBulananOtomatis,
+    catatTransaksiMember,
     bulanIni, tahunIni, BULAN,
   };
 }

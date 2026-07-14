@@ -4,12 +4,12 @@ import { useEffect, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
-import { useMember, Member, MemberDetail, MemberVoucher } from "@/lib/hooks/useMember";
+import { useMember, Member, MemberDetail } from "@/lib/hooks/useMember";
 import { formatRupiah } from "@/lib/utils";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import { useAuth } from "@/lib/auth/AuthProvider";
-import { Gift, ShoppingBag, Edit2, Check, X } from "lucide-react";
+import { Wallet, ShoppingBag, Edit2, Check, X, Plus } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface MemberDetailModalProps {
@@ -17,10 +17,8 @@ interface MemberDetailModalProps {
   onClose: () => void;
 }
 
-const BULAN_NAMA = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"];
-
 export default function MemberDetailModal({ member, onClose }: MemberDetailModalProps) {
-  const { fetchMemberDetail, updateMember, redeemVoucher, bulanIni, tahunIni } = useMember();
+  const { fetchMemberDetail, updateMember, topupManual } = useMember();
   const { profile } = useAuth();
   const [detail, setDetail] = useState<MemberDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -28,10 +26,16 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
   const [editForm, setEditForm] = useState({
     nama: member.nama,
     jabatan: member.jabatan ?? "",
-    voucher_bulanan: member.voucher_bulanan,
+    topup_bulanan: member.topup_bulanan,
     is_active: member.is_active,
   });
   const [saving, setSaving] = useState(false);
+
+  // Top up manual
+  const [topupOpen, setTopupOpen] = useState(false);
+  const [topupNominal, setTopupNominal] = useState<number>(0);
+  const [topupKet, setTopupKet] = useState("");
+  const [topupSaving, setTopupSaving] = useState(false);
 
   useEffect(() => {
     fetchMemberDetail(member.id).then((d) => {
@@ -40,16 +44,9 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
     });
   }, [fetchMemberDetail, member.id]);
 
-  const handleRedeem = async (voucher: MemberVoucher) => {
-    if (!profile?.id) return;
-    if (!confirm(`Konfirmasi: voucher ${BULAN_NAMA[voucher.bulan - 1]} ${voucher.tahun} senilai ${formatRupiah(voucher.nominal)} sudah diambil?`)) return;
-    try {
-      await redeemVoucher(voucher.id, profile.id);
-      const updated = await fetchMemberDetail(member.id);
-      setDetail(updated);
-    } catch (err) {
-      toast.error((err as Error).message);
-    }
+  const reload = async () => {
+    const d = await fetchMemberDetail(member.id);
+    setDetail(d);
   };
 
   const handleSaveEdit = async () => {
@@ -58,8 +55,7 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
       await updateMember(member.id, editForm);
       toast.success("Data member diperbarui");
       setEditMode(false);
-      const updated = await fetchMemberDetail(member.id);
-      setDetail(updated);
+      await reload();
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
@@ -67,9 +63,25 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
     }
   };
 
-  const voucherBulanIni = detail?.vouchers.find(
-    (v) => v.bulan === bulanIni && v.tahun === tahunIni
-  );
+  const handleTopupManual = async () => {
+    if (!topupNominal || topupNominal <= 0) {
+      toast.error("Nominal harus lebih dari 0");
+      return;
+    }
+    if (!profile?.id) return;
+    setTopupSaving(true);
+    try {
+      await topupManual(member.id, topupNominal, topupKet || `Top Up Manual`, profile.id);
+      setTopupOpen(false);
+      setTopupNominal(0);
+      setTopupKet("");
+      await reload();
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setTopupSaving(false);
+    }
+  };
 
   return (
     <Modal isOpen onClose={onClose} title="Detail Member" size="lg">
@@ -81,7 +93,7 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
         </div>
       ) : (
         <div className="space-y-5">
-          {/* Profile Header */}
+          {/* Header profil */}
           <div className="flex items-start gap-4">
             <div className="w-14 h-14 rounded-2xl bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-xl flex-shrink-0">
               {member.nama.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
@@ -89,32 +101,15 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
             <div className="flex-1">
               {editMode ? (
                 <div className="space-y-2">
-                  <input
-                    value={editForm.nama}
-                    onChange={(e) => setEditForm({ ...editForm, nama: e.target.value })}
-                    className="input-base text-sm"
-                    placeholder="Nama"
-                  />
-                  <input
-                    value={editForm.jabatan}
-                    onChange={(e) => setEditForm({ ...editForm, jabatan: e.target.value })}
-                    className="input-base text-sm"
-                    placeholder="Jabatan"
-                  />
+                  <input value={editForm.nama} onChange={(e) => setEditForm({ ...editForm, nama: e.target.value })} className="input-base text-sm" placeholder="Nama" />
+                  <input value={editForm.jabatan} onChange={(e) => setEditForm({ ...editForm, jabatan: e.target.value })} className="input-base text-sm" placeholder="Jabatan" />
                   <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      value={editForm.voucher_bulanan || ""}
-                      onChange={(e) => setEditForm({ ...editForm, voucher_bulanan: Number(e.target.value) })}
-                      className="input-base text-sm"
-                      placeholder="Voucher bulanan (Rp)"
-                    />
-                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={editForm.is_active}
-                        onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
-                      />
+                    <div className="flex-1">
+                      <label className="text-xs text-gray-500">Top Up/Bulan (Rp)</label>
+                      <input type="number" value={editForm.topup_bulanan || ""} onChange={(e) => setEditForm({ ...editForm, topup_bulanan: Number(e.target.value) })} className="input-base text-sm mt-1" />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer mt-4">
+                      <input type="checkbox" checked={editForm.is_active} onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })} />
                       Aktif
                     </label>
                   </div>
@@ -129,102 +124,100 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
                 </div>
               ) : (
                 <>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-bold text-gray-900 text-lg">{detail?.nama}</p>
                     <Badge variant={detail?.is_active ? "success" : "default"}>
                       {detail?.is_active ? "Aktif" : "Nonaktif"}
                     </Badge>
-                    <button
-                      onClick={() => setEditMode(true)}
-                      className="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-                    >
+                    <button onClick={() => setEditMode(true)} className="p-1 text-gray-400 hover:text-blue-500">
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                   <p className="text-sm text-gray-500">{detail?.jabatan ?? "—"}</p>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400">
-                    <span className="font-mono bg-gray-100 px-2 py-0.5 rounded-full">
-                      {member.kode_member}
-                    </span>
+                  <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
+                    <span className="font-mono bg-gray-100 px-2 py-0.5 rounded-full">{member.kode_member}</span>
                     <span>🛒 {detail?.total_transaksi ?? 0}x belanja</span>
-                    <span className="text-amber-600">
-                      🎫 {formatRupiah(detail?.voucher_bulanan ?? 0)}/bln
-                    </span>
+                    <span className="text-blue-500">+{formatRupiah(detail?.topup_bulanan ?? 0)}/bln</span>
                   </div>
                 </>
               )}
             </div>
           </div>
 
-          {/* Voucher Bulan Ini */}
-          <div className={`rounded-xl p-4 border ${
-            voucherBulanIni
-              ? voucherBulanIni.status === "sudah"
-                ? "bg-green-50 border-green-200"
-                : "bg-amber-50 border-amber-200"
-              : "bg-gray-50 border-gray-200"
-          }`}>
+          {/* Saldo Wallet */}
+          <div className="bg-gradient-to-r from-blue-600 to-blue-500 rounded-2xl p-4 text-white">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Gift className={`w-5 h-5 ${
-                  voucherBulanIni?.status === "sudah" ? "text-green-600" :
-                  voucherBulanIni ? "text-amber-600" : "text-gray-400"
-                }`} />
-                <div>
-                  <p className="font-semibold text-sm text-gray-800">
-                    Voucher {BULAN_NAMA[bulanIni - 1]} {tahunIni}
-                  </p>
-                  {voucherBulanIni ? (
-                    <p className="text-xs text-gray-500">
-                      {formatRupiah(voucherBulanIni.nominal)} ·{" "}
-                      {voucherBulanIni.status === "sudah"
-                        ? `✅ Sudah diambil ${format(new Date(voucherBulanIni.diambil_at!), "dd MMM yyyy HH:mm", { locale: id })}`
-                        : "⏳ Belum diambil"
-                      }
-                    </p>
-                  ) : (
-                    <p className="text-xs text-gray-400">
-                      {member.voucher_bulanan > 0
-                        ? "Voucher belum di-generate. Klik Generate Voucher di halaman member."
-                        : "Member ini tidak memiliki voucher bulanan"
-                      }
-                    </p>
-                  )}
-                </div>
+              <div>
+                <p className="text-blue-200 text-xs font-medium mb-1">SALDO WALLET</p>
+                <p className="text-3xl font-black">{formatRupiah(detail?.saldo ?? 0)}</p>
+                <p className="text-blue-200 text-xs mt-1">
+                  Total belanja: {formatRupiah(detail?.total_belanja ?? 0)}
+                </p>
               </div>
-
-              {voucherBulanIni && voucherBulanIni.status === "belum" && (
-                <Button
-                  size="sm"
-                  onClick={() => handleRedeem(voucherBulanIni)}
-                  className="bg-amber-500 hover:bg-amber-600"
+              <div className="flex flex-col gap-2">
+                <button
+                  onClick={() => setTopupOpen(true)}
+                  className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-colors"
                 >
-                  Tandai Sudah Diambil
-                </Button>
-              )}
+                  <Plus className="w-3.5 h-3.5" /> Top Up Manual
+                </button>
+              </div>
             </div>
           </div>
 
-          {/* Riwayat Voucher */}
-          {(detail?.vouchers ?? []).length > 0 && (
+          {/* Form top up manual */}
+          {topupOpen && (
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+              <p className="text-sm font-semibold text-blue-800">Top Up Saldo Manual</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Nominal (Rp)</label>
+                  <input
+                    type="number"
+                    value={topupNominal || ""}
+                    onChange={(e) => setTopupNominal(Number(e.target.value))}
+                    placeholder="75000"
+                    className="input-base text-sm"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Keterangan</label>
+                  <input
+                    value={topupKet}
+                    onChange={(e) => setTopupKet(e.target.value)}
+                    placeholder="Top Up Manual..."
+                    className="input-base text-sm"
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button size="sm" loading={topupSaving} onClick={handleTopupManual} className="flex-1">
+                  Tambah Saldo
+                </Button>
+                <Button size="sm" variant="secondary" onClick={() => setTopupOpen(false)}>
+                  Batal
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Riwayat Top Up */}
+          {(detail?.topups ?? []).length > 0 && (
             <div>
               <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Gift className="w-4 h-4 text-gray-400" />
-                Riwayat Voucher (12 bulan terakhir)
+                <Wallet className="w-4 h-4 text-gray-400" /> Riwayat Top Up
               </h3>
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {detail?.vouchers.map((v) => (
-                  <div
-                    key={v.id}
-                    className={`rounded-xl p-2.5 text-center text-xs border ${
-                      v.status === "sudah"
-                        ? "bg-green-50 border-green-200 text-green-700"
-                        : "bg-amber-50 border-amber-200 text-amber-700"
-                    }`}
-                  >
-                    <p className="font-semibold">{BULAN_NAMA[v.bulan - 1]} {v.tahun}</p>
-                    <p className="mt-0.5">{formatRupiah(v.nominal)}</p>
-                    <p className="mt-0.5">{v.status === "sudah" ? "✅ Diambil" : "⏳ Belum"}</p>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                {detail?.topups.map((t) => (
+                  <div key={t.id} className="flex justify-between items-center py-2 px-3 rounded-xl bg-gray-50 text-sm">
+                    <div>
+                      <p className="font-medium text-gray-700">{t.keterangan ?? "Top Up"}</p>
+                      <p className="text-xs text-gray-400">
+                        {format(new Date(t.created_at), "dd MMM yyyy", { locale: id })}
+                      </p>
+                    </div>
+                    <span className="font-bold text-green-600">+{formatRupiah(t.nominal)}</span>
                   </div>
                 ))}
               </div>
@@ -234,18 +227,25 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
           {/* Riwayat Belanja */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-              <ShoppingBag className="w-4 h-4 text-gray-400" />
-              10 Belanja Terakhir
+              <ShoppingBag className="w-4 h-4 text-gray-400" /> Riwayat Belanja
             </h3>
-            {(detail?.recent_transactions ?? []).length === 0 ? (
+            {(detail?.transactions ?? []).length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Belum ada riwayat belanja</p>
             ) : (
-              <div className="space-y-1.5">
-                {detail?.recent_transactions.map((trx) => (
-                  <div key={trx.id} className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-gray-50">
-                    <span className="text-xs text-gray-500">
-                      {format(new Date(trx.created_at), "dd MMM yyyy, HH:mm", { locale: id })}
-                    </span>
+              <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                {detail?.transactions.map((trx) => (
+                  <div key={trx.id} className="flex items-center justify-between py-2 px-3 rounded-xl bg-gray-50">
+                    <div>
+                      <p className="text-xs text-gray-500">
+                        {format(new Date(trx.created_at), "dd MMM yyyy, HH:mm", { locale: id })}
+                      </p>
+                      {trx.bayar_saldo > 0 && (
+                        <p className="text-xs text-blue-500">
+                          🎫 Pakai saldo: {formatRupiah(trx.bayar_saldo)}
+                          {trx.bayar_tunai > 0 && ` + tunai ${formatRupiah(trx.bayar_tunai)}`}
+                        </p>
+                      )}
+                    </div>
                     <span className="text-sm font-semibold text-gray-800">
                       {formatRupiah(trx.total_amount)}
                     </span>

@@ -6,11 +6,11 @@ import Button from "@/components/ui/Button";
 
 interface TambahMemberModalProps {
   onClose: () => void;
-  onSubmit: (data: { nama: string; jabatan?: string; voucher_bulanan: number }) => Promise<void>;
+  onSubmit: (data: { nama: string; jabatan?: string; topup_bulanan: number }) => Promise<void>;
 }
 
 export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberModalProps) {
-  const [form, setForm] = useState({ nama: "", jabatan: "", voucher_bulanan: 0 });
+  const [form, setForm] = useState({ nama: "", jabatan: "", topup_bulanan: 0 });
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,7 +19,7 @@ export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberMod
     await onSubmit({
       nama: form.nama,
       jabatan: form.jabatan || undefined,
-      voucher_bulanan: form.voucher_bulanan,
+      topup_bulanan: form.topup_bulanan,
     });
     setSaving(false);
   };
@@ -49,17 +49,17 @@ export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberMod
         </div>
 
         <div>
-          <label className="label-base">Voucher Bulanan (Rp)</label>
+          <label className="label-base">Top Up Bulanan (Rp)</label>
           <input
             type="number"
-            value={form.voucher_bulanan || ""}
-            onChange={(e) => setForm({ ...form, voucher_bulanan: Number(e.target.value) })}
+            value={form.topup_bulanan || ""}
+            onChange={(e) => setForm({ ...form, topup_bulanan: Number(e.target.value) })}
             min={0}
-            placeholder="0 = tidak punya voucher"
+            placeholder="Contoh: 75000"
             className="input-base"
           />
           <p className="text-xs text-gray-400 mt-1">
-            Kosongkan atau isi 0 jika tidak ada voucher bulanan
+            Saldo yang ditambahkan setiap bulan. Isi 0 jika tidak ada top up.
           </p>
         </div>
 

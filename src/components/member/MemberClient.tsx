@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Search, Users, Gift, Trophy, RefreshCw } from "lucide-react";
+import { Plus, Search, Users, Wallet, Trophy, RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useMember, Member } from "@/lib/hooks/useMember";
@@ -13,14 +13,15 @@ import toast from "react-hot-toast";
 export default function MemberClient() {
   const {
     members, loading,
-    fetchMembers, tambahMember, generateVoucherBulanIni,
+    fetchMembers, tambahMember,
+    topupBulananOtomatis,
     bulanIni, tahunIni, BULAN,
   } = useMember();
 
   const [search, setSearch] = useState("");
   const [tambahOpen, setTambahOpen] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [generating, setGenerating] = useState(false);
+  const [topupLoading, setTopupLoading] = useState(false);
 
   useEffect(() => { fetchMembers(); }, [fetchMembers]);
 
@@ -30,21 +31,23 @@ export default function MemberClient() {
     (m.jabatan ?? "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // Ranking belanja
   const ranked = [...members]
     .filter((m) => m.is_active)
     .sort((a, b) => (b.total_transaksi ?? 0) - (a.total_transaksi ?? 0))
     .slice(0, 5);
 
-  const handleGenerate = async () => {
-    setGenerating(true);
+  // Total saldo semua member
+  const totalSaldo = members.reduce((s, m) => s + m.saldo, 0);
+
+  const handleTopupBulanan = async () => {
+    setTopupLoading(true);
     try {
-      await generateVoucherBulanIni();
+      await topupBulananOtomatis();
       await fetchMembers();
     } catch (err) {
       toast.error((err as Error).message);
     } finally {
-      setGenerating(false);
+      setTopupLoading(false);
     }
   };
 
@@ -55,17 +58,13 @@ export default function MemberClient() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Member Guru</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Program belanja & voucher bulanan untuk guru
+            Sistem wallet & top up bulanan untuk guru
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            onClick={handleGenerate}
-            loading={generating}
-          >
-            <Gift className="w-4 h-4" />
-            Generate Voucher {BULAN[bulanIni - 1]} {tahunIni}
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="secondary" onClick={handleTopupBulanan} loading={topupLoading}>
+            <Wallet className="w-4 h-4" />
+            Top Up Otomatis {BULAN[bulanIni - 1]} {tahunIni}
           </Button>
           <Button onClick={() => setTambahOpen(true)}>
             <Plus className="w-4 h-4" />
@@ -74,8 +73,29 @@ export default function MemberClient() {
         </div>
       </div>
 
+      {/* Info cara kerja */}
+      <div className="card p-4 bg-blue-50 border-blue-200">
+        <div className="flex gap-6 text-sm flex-wrap">
+          {[
+            { step: "1", label: "Daftar Member", desc: "Tambah guru sebagai member, set nominal top up/bulan" },
+            { step: "2", label: "Top Up Bulanan", desc: "Klik 'Top Up Otomatis' tiap bulan → saldo semua member bertambah" },
+            { step: "3", label: "Belanja Pakai Saldo", desc: "Di kasir pilih Member → saldo terpakai otomatis terpotong + terdata" },
+          ].map((item) => (
+            <div key={item.step} className="flex items-start gap-2">
+              <span className="w-6 h-6 rounded-full bg-blue-500 text-white text-xs font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                {item.step}
+              </span>
+              <div>
+                <p className="font-semibold text-blue-800">{item.label}</p>
+                <p className="text-blue-600 text-xs">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Kolom kiri: Daftar Member */}
+        {/* Daftar Member */}
         <div className="lg:col-span-2 space-y-4">
           {/* Stats */}
           <div className="grid grid-cols-3 gap-3">
@@ -90,14 +110,14 @@ export default function MemberClient() {
               </p>
             </div>
             <div className="card p-4 text-center">
-              <p className="text-xs text-gray-500 mb-1">Punya Voucher</p>
-              <p className="text-2xl font-bold text-amber-600">
-                {members.filter((m) => m.voucher_bulanan > 0).length}
+              <p className="text-xs text-gray-500 mb-1">Total Saldo</p>
+              <p className="text-lg font-bold text-blue-600">
+                {formatRupiah(totalSaldo)}
               </p>
             </div>
           </div>
 
-          {/* Search & tabel */}
+          {/* Tabel member */}
           <div className="card overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex items-center gap-3">
               <div className="relative flex-1">
@@ -122,7 +142,7 @@ export default function MemberClient() {
               <div className="py-16 text-center text-gray-400">
                 <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
                 <p className="font-medium text-gray-500">
-                  {members.length === 0 ? "Belum ada member" : "Member tidak ditemukan"}
+                  {members.length === 0 ? "Belum ada member" : "Tidak ditemukan"}
                 </p>
               </div>
             ) : (
@@ -133,12 +153,9 @@ export default function MemberClient() {
                     onClick={() => setSelectedMember(member)}
                     className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
                   >
-                    {/* Avatar */}
                     <div className="w-11 h-11 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold flex-shrink-0">
                       {member.nama.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                     </div>
-
-                    {/* Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-gray-800">{member.nama}</p>
@@ -150,20 +167,19 @@ export default function MemberClient() {
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
                         {member.jabatan && <span>{member.jabatan}</span>}
                         <span>🛒 {member.total_transaksi ?? 0}x belanja</span>
-                        {member.voucher_bulanan > 0 && (
-                          <span className="text-amber-600 font-medium">
-                            🎫 {formatRupiah(member.voucher_bulanan)}/bln
+                        {member.topup_bulanan > 0 && (
+                          <span className="text-blue-500 font-medium">
+                            +{formatRupiah(member.topup_bulanan)}/bln
                           </span>
                         )}
                       </div>
                     </div>
-
-                    {/* Total belanja */}
+                    {/* Saldo */}
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-gray-700">
-                        {formatRupiah(member.total_belanja ?? 0)}
+                      <p className={`text-sm font-bold ${member.saldo > 0 ? "text-green-600" : "text-gray-400"}`}>
+                        {formatRupiah(member.saldo)}
                       </p>
-                      <p className="text-xs text-gray-400">total belanja</p>
+                      <p className="text-xs text-gray-400">saldo</p>
                     </div>
                   </button>
                 ))}
@@ -172,33 +188,27 @@ export default function MemberClient() {
           </div>
         </div>
 
-        {/* Kolom kanan: Ranking */}
+        {/* Kolom kanan */}
         <div className="space-y-4">
+          {/* Ranking */}
           <div className="card p-5">
             <div className="flex items-center gap-2 mb-4">
               <Trophy className="w-5 h-5 text-yellow-500" />
               <h2 className="font-semibold text-gray-900">Ranking Belanja</h2>
             </div>
-
             {ranked.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">
-                Belum ada data belanja
-              </p>
+              <p className="text-sm text-gray-400 text-center py-4">Belum ada data</p>
             ) : (
               <div className="space-y-3">
-                {ranked.map((member, idx) => {
-                  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+                {ranked.map((m, idx) => {
+                  const medals = ["🥇","🥈","🥉","4️⃣","5️⃣"];
                   return (
-                    <div key={member.id} className="flex items-center gap-3">
-                      <span className="text-xl w-8 text-center flex-shrink-0">
-                        {medals[idx]}
-                      </span>
+                    <div key={m.id} className="flex items-center gap-3">
+                      <span className="text-xl w-8 text-center">{medals[idx]}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800 truncate">
-                          {member.nama}
-                        </p>
+                        <p className="text-sm font-semibold text-gray-800 truncate">{m.nama}</p>
                         <p className="text-xs text-gray-400">
-                          {member.total_transaksi ?? 0}x · {formatRupiah(member.total_belanja ?? 0)}
+                          {m.total_transaksi ?? 0}x · {formatRupiah(m.total_belanja ?? 0)}
                         </p>
                       </div>
                     </div>
@@ -208,22 +218,21 @@ export default function MemberClient() {
             )}
           </div>
 
-          {/* Info voucher bulan ini */}
-          <div className="card p-5 bg-amber-50 border-amber-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Gift className="w-5 h-5 text-amber-600" />
-              <h2 className="font-semibold text-amber-800">
-                Voucher {BULAN[bulanIni - 1]} {tahunIni}
-              </h2>
+          {/* Info top up */}
+          <div className="card p-5 bg-blue-50 border-blue-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Wallet className="w-5 h-5 text-blue-600" />
+              <h2 className="font-semibold text-blue-800">Cara Top Up</h2>
             </div>
-            <p className="text-xs text-amber-700 leading-relaxed">
-              Klik "Generate Voucher" di atas untuk membuat voucher bulan ini bagi semua member aktif yang memiliki nominal voucher. Voucher hanya bisa diambil sekali per bulan.
-            </p>
+            <div className="text-xs text-blue-700 space-y-1.5">
+              <p>• <b>Otomatis:</b> Klik tombol "Top Up Otomatis" setiap bulan → saldo semua member bertambah sesuai nominal masing-masing</p>
+              <p>• <b>Manual:</b> Klik nama member → tombol "Top Up Manual" untuk tambah saldo individual</p>
+              <p>• <b>Saldo menumpuk</b> jika bulan lalu belum dipakai</p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Modal Tambah Member */}
       {tambahOpen && (
         <TambahMemberModal
           onClose={() => setTambahOpen(false)}
@@ -238,7 +247,6 @@ export default function MemberClient() {
         />
       )}
 
-      {/* Modal Detail Member */}
       {selectedMember && (
         <MemberDetailModal
           member={selectedMember}

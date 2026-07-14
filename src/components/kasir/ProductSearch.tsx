@@ -1,7 +1,7 @@
 "use client";
 
 import { Search, Scan } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Product } from "@/types";
 import { cn, formatRupiah } from "@/lib/utils";
 import { useProducts } from "@/lib/hooks/useProducts";
@@ -19,28 +19,93 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
 
+  // Buffer untuk deteksi alat scanner USB
+  // Scanner mengirim karakter sangat cepat (<100ms) lalu Enter
+  const barcodeBufferRef = useRef("");
+  const barcodeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const { products, loading: loadingProducts } = useProducts();
   const { categories, loading: loadingCat } = useCategories();
 
+  // Cari produk berdasarkan barcode lalu tambah ke keranjang
+  const findAndAddByBarcode = useCallback((barcode: string) => {
+    const trimmed = barcode.trim();
+    if (!trimmed) return false;
+    const found = products.find((p) => p.barcode === trimmed);
+    if (found) {
+      toast.success(`✅ ${found.name} ditambahkan`);
+      onAddToCart(found);
+      setQuery("");
+      return true;
+    }
+    return false;
+  }, [products, onAddToCart]);
+
+  // Global keydown — deteksi alat scanner USB
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement;
+      const isOtherInput =
+        active &&
+        active !== searchRef.current &&
+        (active.tagName === "INPUT" ||
+          active.tagName === "TEXTAREA" ||
+          active.tagName === "SELECT");
+      if (isOtherInput) return;
+
+      if (e.key === "Enter") {
+        if (barcodeBufferRef.current.length >= 4) {
+          const found = findAndAddByBarcode(barcodeBufferRef.current);
+          if (found) {
+            barcodeBufferRef.current = "";
+            return;
+          }
+        }
+        barcodeBufferRef.current = "";
+        return;
+      }
+
+      if (e.key.length === 1) {
+        barcodeBufferRef.current += e.key;
+        if (barcodeTimerRef.current) clearTimeout(barcodeTimerRef.current);
+        barcodeTimerRef.current = setTimeout(() => {
+          barcodeBufferRef.current = "";
+        }, 100);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [findAndAddByBarcode]);
+
+  // Input manual — auto-add jika barcode exact match
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setQuery(val);
+    if (val.length >= 4) {
+      const exact = products.find((p) => p.barcode === val);
+      if (exact) {
+        setTimeout(() => {
+          toast.success(`✅ ${exact.name} ditambahkan`);
+          onAddToCart(exact);
+          setQuery("");
+        }, 50);
+      }
+    }
+  };
+
+  // Dari kamera scanner
   const handleBarcodeDetected = (barcode: string) => {
     setScannerOpen(false);
-    // Cari produk berdasarkan barcode
-    const found = products.find((p) => p.barcode === barcode);
-    if (found) {
-      toast.success(`✅ ${found.name}`);
-      onAddToCart(found);
-    } else {
-      // Tidak ketemu → isi ke search box agar kasir bisa cari manual
+    const found = findAndAddByBarcode(barcode);
+    if (!found) {
       setQuery(barcode);
-      toast(`Barcode: ${barcode} — produk tidak ditemukan`, { icon: "🔍" });
+      toast(`Barcode ${barcode} tidak ditemukan`, { icon: "🔍" });
     }
     searchRef.current?.focus();
   };
 
-  const allCategories = [
-    { id: "all", name: "Semua", icon: "🏪" },
-    ...categories,
-  ];
+  const allCategories = [{ id: "all", name: "Semua", icon: "🏪" }, ...categories];
 
   const filtered = products.filter((p) => {
     const matchSearch =
@@ -54,31 +119,30 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
 
   return (
     <div className="card h-full flex flex-col overflow-hidden">
-      {/* Search bar + tombol scan */}
+      {/* Search + tombol kamera */}
       <div className="p-3 border-b border-gray-100">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             ref={searchRef}
             type="text"
-            placeholder="Cari nama / ketik barcode..."
+            placeholder="Cari nama / scan barcode..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={handleInputChange}
             className="input-base pl-9 pr-10 text-sm py-2"
             autoFocus
           />
-          {/* Tombol buka kamera scanner */}
           <button
             onClick={() => setScannerOpen(true)}
             className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-400 hover:text-green-600 hover:bg-green-50 transition-colors"
-            title="Scan barcode"
+            title="Buka kamera scanner"
           >
             <Scan className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* Scanner fullscreen */}
+      {/* Kamera scanner fullscreen */}
       {scannerOpen && (
         <BarcodeScanner
           onDetected={handleBarcodeDetected}
@@ -86,7 +150,7 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
         />
       )}
 
-      {/* Kategori grid */}
+      {/* Kategori */}
       <div className="p-2 border-b border-gray-100">
         {loadingCat ? (
           <div className="grid grid-cols-3 gap-1.5">
@@ -138,9 +202,7 @@ export default function ProductSearch({ onAddToCart }: ProductSearchProps) {
                 {product.category?.icon ?? "🛒"}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-gray-800 truncate">
-                  {product.name}
-                </p>
+                <p className="text-xs font-semibold text-gray-800 truncate">{product.name}</p>
                 <p className="text-xs text-green-700 font-bold mt-0.5">
                   {formatRupiah(product.price_sell)}
                 </p>
