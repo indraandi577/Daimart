@@ -12,6 +12,7 @@ import {
   Menu,
   X,
   UtensilsCrossed,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -55,6 +56,12 @@ const navItems: NavItem[] = [
     label: "Kantin",
     href: "/kantin",
     icon: UtensilsCrossed,
+    roles: ["owner", "kasir"],
+  },
+  {
+    label: "Member",
+    href: "/member",
+    icon: Users,
     roles: ["owner", "kasir"],
   },
   {
