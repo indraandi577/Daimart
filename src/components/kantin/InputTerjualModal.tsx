@@ -38,7 +38,7 @@ export default function InputTerjualModal({ penitip, onClose, onSubmit }: InputT
           {penitip.snacks.map((snack) => {
             const qty = values[snack.id] ?? 0;
             const totalLaku = qty * snack.harga_jual;
-            const komisi = Math.round(totalLaku * snack.komisi_pct / 100);
+            const komisi = Math.round((totalLaku * snack.komisi_pct / 100) / 1000) * 1000;
             const uangPenitip = totalLaku - komisi;
 
             return (

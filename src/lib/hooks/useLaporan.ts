@@ -60,10 +60,10 @@ export function useLaporan() {
   const [customEnd, setCustomEnd] = useState<string>(format(new Date(), "yyyy-MM-dd"));
 
   const [stats, setStats] = useState<LaporanStats>({
-    total_omset: 8_750_000,
-    total_laba: 2_187_500,
-    total_transaksi: 87,
-    produk_menipis: 3,
+    total_omset: 0,
+    total_laba: 0,
+    total_transaksi: 0,
+    produk_menipis: 0,
   });
   const [chartData, setChartData] = useState<ChartPoint[]>(DUMMY_CHART_7);
   const [transactions, setTransactions] = useState<TransactionRow[]>(DUMMY_TRANSACTIONS);
@@ -161,9 +161,21 @@ export function useLaporan() {
           .filter("stock", "lte", supabase.rpc as unknown as string)
           .eq("is_active", true);
 
+        // Komisi kantin dalam range tanggal
+        const fromDate = from.toISOString().split("T")[0];
+        const toDate = to.toISOString().split("T")[0];
+        const { data: kantinData } = await supabase
+          .from("kantin_sesi")
+          .select("komisi_total")
+          .gte("tanggal", fromDate)
+          .lte("tanggal", toDate)
+          .eq("status", "selesai");
+
+        const komisiKantin = kantinData?.reduce((s, k) => s + (k.komisi_total ?? 0), 0) ?? 0;
+
         setStats({
-          total_omset: totalOmset,
-          total_laba: totalLaba,
+          total_omset: totalOmset + komisiKantin,
+          total_laba: totalLaba + komisiKantin,
           total_transaksi: completed.length,
           produk_menipis: menipis ?? 0,
         });
@@ -187,6 +199,20 @@ export function useLaporan() {
       chartTrx?.forEach((t) => {
         const key = t.created_at.split("T")[0];
         if (grouped[key]) { grouped[key].omset += t.total_amount; grouped[key].transaksi += 1; }
+      });
+
+      // Tambahkan komisi kantin ke chart per tanggal
+      const { data: kantinChart } = await supabase
+        .from("kantin_sesi")
+        .select("tanggal, komisi_total")
+        .gte("tanggal", format(from, "yyyy-MM-dd"))
+        .lte("tanggal", format(to, "yyyy-MM-dd"))
+        .eq("status", "selesai");
+
+      kantinChart?.forEach((k) => {
+        if (grouped[k.tanggal]) {
+          grouped[k.tanggal].omset += k.komisi_total ?? 0;
+        }
       });
 
       setChartData(Object.entries(grouped).map(([date, val]) => ({

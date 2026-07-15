@@ -10,6 +10,7 @@ create table if not exists public.kantin_sesi (
   tanggal      date not null default current_date,
   catatan      text,
   status       text not null default 'aktif', -- aktif | selesai
+  komisi_total integer not null default 0,    -- total komisi kantin saat sesi selesai
   created_by   uuid references public.profiles(id),
   created_at   timestamptz not null default now(),
   updated_at   timestamptz not null default now()

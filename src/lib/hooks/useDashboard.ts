@@ -71,7 +71,21 @@ export function useDashboard() {
         return s + (i.price_sell - priceBuy) * i.qty;
       }, 0) ?? 0;
 
-      setStats({ total_omset: totalOmset, total_laba: totalLaba, total_transaksi: totalTransaksi, total_produk_terjual: totalQty });
+      // Komisi kantin hari ini (sesi yang selesai hari ini)
+      const { data: kantinHariIni } = await supabase
+        .from("kantin_sesi")
+        .select("komisi_total")
+        .eq("tanggal", todayStr)
+        .eq("status", "selesai");
+
+      const komisiKantin = kantinHariIni?.reduce((s, k) => s + (k.komisi_total ?? 0), 0) ?? 0;
+
+      setStats({
+        total_omset: totalOmset + komisiKantin,       // omset kasir + komisi kantin
+        total_laba: totalLaba + komisiKantin,          // laba kasir + komisi kantin
+        total_transaksi: totalTransaksi,
+        total_produk_terjual: totalQty,
+      });
 
       // ─── Chart 7 hari ─────────────────────────────────────
       const { data: weekTrx } = await supabase

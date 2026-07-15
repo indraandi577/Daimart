@@ -38,7 +38,9 @@ export interface KantinSnack {
 // Hitung derived fields snack
 export function computeSnack(s: Omit<KantinSnack, "qty_sisa" | "total_laku" | "komisi_kantin" | "uang_penitip">): KantinSnack {
   const total_laku = s.qty_terjual * s.harga_jual;
-  const komisi_kantin = Math.round(total_laku * s.komisi_pct / 100);
+  // Bulatkan komisi ke ribuan terdekat (misal 1.875 → 2.000, 1.425 → 1.000)
+  const komisi_raw = total_laku * s.komisi_pct / 100;
+  const komisi_kantin = Math.round(komisi_raw / 1000) * 1000;
   return {
     ...s,
     qty_sisa: s.qty_titip - s.qty_terjual,
@@ -191,9 +193,21 @@ export function useKantin() {
 
   // ── Selesaikan sesi ──────────────────────────────────────
   const selesaikanSesi = async (sesiId: string) => {
+    // Hitung total komisi sesi ini dari semua snack
+    const { data: snacks } = await supabase
+      .from("kantin_snack")
+      .select("qty_terjual, harga_jual, komisi_pct, penitip:kantin_penitip!inner(sesi_id)")
+      .eq("penitip.sesi_id", sesiId);
+
+    const komisiTotal = (snacks ?? []).reduce((sum, s) => {
+      const total_laku = s.qty_terjual * s.harga_jual;
+      const komisi_raw = total_laku * s.komisi_pct / 100;
+      return sum + Math.round(komisi_raw / 1000) * 1000;
+    }, 0);
+
     const { error } = await supabase
       .from("kantin_sesi")
-      .update({ status: "selesai" })
+      .update({ status: "selesai", komisi_total: komisiTotal })
       .eq("id", sesiId);
     if (error) throw new Error(error.message);
     toast.success("Sesi kantin diselesaikan");
