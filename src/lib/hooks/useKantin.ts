@@ -30,23 +30,30 @@ export interface KantinSnack {
   komisi_pct: number;
   // Computed
   qty_sisa: number;
-  total_laku: number;          // qty_terjual × harga_jual
-  komisi_kantin: number;       // total_laku × (komisi_pct/100)
-  uang_penitip: number;        // total_laku - komisi_kantin
+  total_laku: number;
+  komisi_kantin: number;       // komisi asli (exact)
+  uang_penitip_asli: number;   // uang penitip sebelum dibulatkan
+  uang_penitip: number;        // uang penitip setelah dibulatkan ke 500 terdekat
+}
+
+/** Bulatkan ke 500 terdekat — contoh: 12.345 → 12.500, 12.200 → 12.000 */
+export function bulatkan500(nilai: number): number {
+  return Math.round(nilai / 500) * 500;
 }
 
 // Hitung derived fields snack
-export function computeSnack(s: Omit<KantinSnack, "qty_sisa" | "total_laku" | "komisi_kantin" | "uang_penitip">): KantinSnack {
+export function computeSnack(s: Omit<KantinSnack, "qty_sisa" | "total_laku" | "komisi_kantin" | "uang_penitip_asli" | "uang_penitip">): KantinSnack {
   const total_laku = s.qty_terjual * s.harga_jual;
-  // Bulatkan komisi ke ribuan terdekat (misal 1.875 → 2.000, 1.425 → 1.000)
-  const komisi_raw = total_laku * s.komisi_pct / 100;
-  const komisi_kantin = Math.round(komisi_raw / 1000) * 1000;
+  const komisi_kantin = Math.round(total_laku * s.komisi_pct / 100); // komisi exact
+  const uang_penitip_asli = total_laku - komisi_kantin;              // sebelum bulatkan
+  const uang_penitip = bulatkan500(uang_penitip_asli);               // dibulatkan ke 500
   return {
     ...s,
     qty_sisa: s.qty_titip - s.qty_terjual,
     total_laku,
     komisi_kantin,
-    uang_penitip: total_laku - komisi_kantin,
+    uang_penitip_asli,
+    uang_penitip,
   };
 }
 
@@ -56,9 +63,10 @@ export function totalPenitip(penitip: KantinPenitip) {
     (acc, s) => ({
       total_laku: acc.total_laku + s.total_laku,
       komisi_kantin: acc.komisi_kantin + s.komisi_kantin,
+      uang_penitip_asli: acc.uang_penitip_asli + s.uang_penitip_asli,
       uang_penitip: acc.uang_penitip + s.uang_penitip,
     }),
-    { total_laku: 0, komisi_kantin: 0, uang_penitip: 0 }
+    { total_laku: 0, komisi_kantin: 0, uang_penitip_asli: 0, uang_penitip: 0 }
   );
 }
 
@@ -128,6 +136,29 @@ export function useKantin() {
     toast.success("Sesi kantin dibuat");
     await fetchSesiList();
     return data;
+  };
+
+  // ── Edit sesi ────────────────────────────────────────────
+  const editSesi = async (sesiId: string, tanggal: string, catatan?: string) => {
+    const { error } = await supabase
+      .from("kantin_sesi")
+      .update({ tanggal, catatan: catatan || null })
+      .eq("id", sesiId);
+    if (error) throw new Error(error.message);
+    toast.success("Sesi diperbarui");
+    await fetchSesiList();
+  };
+
+  // ── Hapus sesi ───────────────────────────────────────────
+  const hapusSesi = async (sesiId: string) => {
+    // cascade delete akan hapus penitip & snack otomatis
+    const { error } = await supabase
+      .from("kantin_sesi")
+      .delete()
+      .eq("id", sesiId);
+    if (error) throw new Error(error.message);
+    toast.success("Sesi dihapus");
+    await fetchSesiList();
   };
 
   // ── Tambah penitip ke sesi ───────────────────────────────
@@ -220,7 +251,8 @@ export function useKantin() {
   return {
     sesiList, activeSesi, penitips, loading,
     fetchSesiList, fetchSesiDetail,
-    buatSesi, tambahPenitip, tambahSnack,
+    buatSesi, editSesi, hapusSesi,
+    tambahPenitip, tambahSnack,
     updateTerjual, hapusSnack, hapusPenitip,
     selesaikanSesi, totalKomisiSesi,
     today: format(new Date(), "yyyy-MM-dd"),

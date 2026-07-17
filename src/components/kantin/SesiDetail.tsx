@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowLeft, Plus, CheckCircle, Trash2, ShoppingBag } from "lucide-react";
+import { ArrowLeft, Plus, CheckCircle, Trash2, ShoppingBag, Edit2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import { useKantin, KantinPenitip, totalPenitip } from "@/lib/hooks/useKantin";
 import { formatRupiah } from "@/lib/utils";
@@ -192,8 +192,9 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                         <th className="text-center">Terjual</th>
                         <th className="text-center">Sisa</th>
                         <th className="text-right">Total Laku</th>
-                        <th className="text-right">Komisi 15%</th>
-                        <th className="text-right">Uang Penitip</th>
+                        <th className="text-right">Komisi {penitip.snacks[0]?.komisi_pct ?? 15}%</th>
+                        <th className="text-right">Uang Penitip (Asli)</th>
+                        <th className="text-right">Uang Penitip (Bulat)</th>
                         {!isSelesai && <th />}
                       </tr>
                     </thead>
@@ -219,8 +220,16 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                           <td className="text-right text-amber-600">
                             {formatRupiah(snack.komisi_kantin)}
                           </td>
+                          <td className="text-right text-gray-500 text-xs">
+                            {formatRupiah(snack.uang_penitip_asli)}
+                          </td>
                           <td className="text-right font-bold text-gray-800">
                             {formatRupiah(snack.uang_penitip)}
+                            {snack.uang_penitip !== snack.uang_penitip_asli && (
+                              <span className="block text-xs text-blue-500 font-normal">
+                                dibulatkan
+                              </span>
+                            )}
                           </td>
                           {!isSelesai && (
                             <td>
@@ -254,6 +263,9 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                         </td>
                         <td className="px-4 py-2.5 text-right text-amber-600">
                           {formatRupiah(tot.komisi_kantin)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-500 text-xs font-normal">
+                          {formatRupiah(tot.uang_penitip_asli)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-800">
                           {formatRupiah(tot.uang_penitip)}

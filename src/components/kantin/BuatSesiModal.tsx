@@ -7,13 +7,21 @@ import toast from "react-hot-toast";
 
 interface BuatSesiModalProps {
   defaultTanggal: string;
+  defaultCatatan?: string;
+  editMode?: boolean;
   onClose: () => void;
   onSubmit: (tanggal: string, catatan?: string) => Promise<void>;
 }
 
-export default function BuatSesiModal({ defaultTanggal, onClose, onSubmit }: BuatSesiModalProps) {
+export default function BuatSesiModal({
+  defaultTanggal,
+  defaultCatatan = "",
+  editMode = false,
+  onClose,
+  onSubmit,
+}: BuatSesiModalProps) {
   const [tanggal, setTanggal] = useState(defaultTanggal);
-  const [catatan, setCatatan] = useState("");
+  const [catatan, setCatatan] = useState(defaultCatatan);
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -29,7 +37,12 @@ export default function BuatSesiModal({ defaultTanggal, onClose, onSubmit }: Bua
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Buat Sesi Kantin Baru" size="sm">
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={editMode ? "Edit Sesi Kantin" : "Buat Sesi Kantin Baru"}
+      size="sm"
+    >
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="label-base">Tanggal</label>
@@ -51,8 +64,12 @@ export default function BuatSesiModal({ defaultTanggal, onClose, onSubmit }: Bua
           />
         </div>
         <div className="flex gap-3 pt-1">
-          <Button type="button" variant="secondary" onClick={onClose} className="flex-1">Batal</Button>
-          <Button type="submit" loading={saving} className="flex-1">Buat Sesi</Button>
+          <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+            Batal
+          </Button>
+          <Button type="submit" loading={saving} className="flex-1">
+            {editMode ? "Simpan Perubahan" : "Buat Sesi"}
+          </Button>
         </div>
       </form>
     </Modal>

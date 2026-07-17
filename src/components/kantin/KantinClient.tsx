@@ -1,19 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, ChevronRight, Calendar, CheckCircle, Clock } from "lucide-react";
+import { Plus, ChevronRight, Calendar, CheckCircle, Clock, Edit2, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { useKantin } from "@/lib/hooks/useKantin";
+import { useKantin, KantinSesi } from "@/lib/hooks/useKantin";
 import { formatRupiah } from "@/lib/utils";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import SesiDetail from "./SesiDetail";
 import BuatSesiModal from "./BuatSesiModal";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 
 export default function KantinClient() {
-  const { sesiList, loading, fetchSesiList, buatSesi, today } = useKantin();
+  const { sesiList, loading, fetchSesiList, buatSesi, editSesi, hapusSesi, today } = useKantin();
   const [buatOpen, setBuatOpen] = useState(false);
+  const [editSesiData, setEditSesiData] = useState<KantinSesi | null>(null);
   const [selectedSesiId, setSelectedSesiId] = useState<string | null>(null);
 
   useEffect(() => { fetchSesiList(); }, [fetchSesiList]);
@@ -89,49 +91,75 @@ export default function KantinClient() {
             {sesiList.map((sesi) => {
               const isToday = sesi.tanggal === today;
               return (
-                <button
-                  key={sesi.id}
-                  onClick={() => setSelectedSesiId(sesi.id)}
-                  className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
-                >
-                  {/* Ikon status */}
-                  <div className={cn(
-                    "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg",
-                    sesi.status === "selesai" ? "bg-green-100" : "bg-amber-100"
-                  )}>
-                    {sesi.status === "selesai" ? "✅" : "🍱"}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-gray-800">
-                        {format(new Date(sesi.tanggal), "EEEE, dd MMMM yyyy", { locale: id })}
-                      </p>
-                      {isToday && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                          Hari ini
-                        </span>
-                      )}
+                <div key={sesi.id} className="flex items-center border-t border-gray-50 first:border-0">
+                  {/* Klik baris → buka detail */}
+                  <button
+                    onClick={() => setSelectedSesiId(sesi.id)}
+                    className="flex-1 flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg",
+                      sesi.status === "selesai" ? "bg-green-100" : "bg-amber-100"
+                    )}>
+                      {sesi.status === "selesai" ? "✅" : "🍱"}
                     </div>
-                    <div className="flex items-center gap-3 mt-0.5">
-                      {sesi.status === "selesai" ? (
-                        <span className="flex items-center gap-1 text-xs text-green-600">
-                          <CheckCircle className="w-3 h-3" /> Selesai
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1 text-xs text-amber-600">
-                          <Clock className="w-3 h-3" /> Aktif
-                        </span>
-                      )}
-                      {sesi.catatan && (
-                        <span className="text-xs text-gray-400 truncate">{sesi.catatan}</span>
-                      )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-gray-800">
+                          {format(new Date(sesi.tanggal), "EEEE, dd MMMM yyyy", { locale: id })}
+                        </p>
+                        {isToday && (
+                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                            Hari ini
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        {sesi.status === "selesai" ? (
+                          <span className="flex items-center gap-1 text-xs text-green-600">
+                            <CheckCircle className="w-3 h-3" /> Selesai
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-amber-600">
+                            <Clock className="w-3 h-3" /> Aktif
+                          </span>
+                        )}
+                        {sesi.catatan && (
+                          <span className="text-xs text-gray-400 truncate">{sesi.catatan}</span>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                    <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                  </button>
 
-                  <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
-                </button>
+                  {/* Tombol Edit & Hapus */}
+                  <div className="flex items-center gap-1 pr-3">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditSesiData(sesi); }}
+                      className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                      title="Edit sesi"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                    {sesi.status !== "selesai" && (
+                      <button
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (!confirm(`Hapus sesi tanggal ${format(new Date(sesi.tanggal), "dd MMM yyyy")}? Semua data penitip & snack akan ikut terhapus.`)) return;
+                          try {
+                            await hapusSesi(sesi.id);
+                          } catch (err) {
+                            toast.error((err as Error).message);
+                          }
+                        }}
+                        className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Hapus sesi"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
               );
             })}
           </div>
@@ -150,6 +178,24 @@ export default function KantinClient() {
               setSelectedSesiId(sesi.id);
             } catch (err) {
               throw err;
+            }
+          }}
+        />
+      )}
+
+      {/* Modal Edit Sesi */}
+      {editSesiData && (
+        <BuatSesiModal
+          defaultTanggal={editSesiData.tanggal}
+          defaultCatatan={editSesiData.catatan ?? ""}
+          editMode
+          onClose={() => setEditSesiData(null)}
+          onSubmit={async (tanggal, catatan) => {
+            try {
+              await editSesi(editSesiData.id, tanggal, catatan);
+              setEditSesiData(null);
+            } catch (err) {
+              toast.error((err as Error).message);
             }
           }}
         />
