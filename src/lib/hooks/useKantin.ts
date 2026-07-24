@@ -41,33 +41,36 @@ export function bulatkan500(nilai: number): number {
   return Math.round(nilai / 500) * 500;
 }
 
-// Hitung derived fields snack
+// Hitung derived fields snack — tanpa pembulatan, pembulatan di level penitip
 export function computeSnack(s: Omit<KantinSnack, "qty_sisa" | "total_laku" | "komisi_kantin" | "uang_penitip_asli" | "uang_penitip">): KantinSnack {
   const total_laku = s.qty_terjual * s.harga_jual;
-  const komisi_kantin = Math.round(total_laku * s.komisi_pct / 100); // komisi exact
-  const uang_penitip_asli = total_laku - komisi_kantin;              // sebelum bulatkan
-  const uang_penitip = bulatkan500(uang_penitip_asli);               // dibulatkan ke 500
+  const komisi_kantin = Math.round(total_laku * s.komisi_pct / 100); // exact, tidak dibulatkan
+  const uang_penitip_asli = total_laku - komisi_kantin;
   return {
     ...s,
     qty_sisa: s.qty_titip - s.qty_terjual,
     total_laku,
     komisi_kantin,
     uang_penitip_asli,
-    uang_penitip,
+    uang_penitip: uang_penitip_asli, // sama dulu, pembulatan di totalPenitip
   };
 }
 
-// Hitung total per penitip
+// Hitung total per penitip — pembulatan ke 500 dilakukan di TOTAL, bukan per item
 export function totalPenitip(penitip: KantinPenitip) {
-  return penitip.snacks.reduce(
+  const raw = penitip.snacks.reduce(
     (acc, s) => ({
       total_laku: acc.total_laku + s.total_laku,
       komisi_kantin: acc.komisi_kantin + s.komisi_kantin,
       uang_penitip_asli: acc.uang_penitip_asli + s.uang_penitip_asli,
-      uang_penitip: acc.uang_penitip + s.uang_penitip,
     }),
-    { total_laku: 0, komisi_kantin: 0, uang_penitip_asli: 0, uang_penitip: 0 }
+    { total_laku: 0, komisi_kantin: 0, uang_penitip_asli: 0 }
   );
+  return {
+    ...raw,
+    // Bulatkan TOTAL ke 500 terdekat — bukan per item
+    uang_penitip: bulatkan500(raw.uang_penitip_asli),
+  };
 }
 
 export function useKantin() {
@@ -204,6 +207,21 @@ export function useKantin() {
     if (error) throw new Error(error.message);
   };
 
+  // ── Edit snack (nama, harga, qty titip, komisi) ──────────
+  const editSnack = async (snackId: string, data: {
+    nama_snack: string;
+    harga_jual: number;
+    qty_titip: number;
+    komisi_pct: number;
+  }) => {
+    const { error } = await supabase
+      .from("kantin_snack")
+      .update(data)
+      .eq("id", snackId);
+    if (error) throw new Error(error.message);
+    toast.success("Snack diperbarui");
+  };
+
   // ── Hapus snack ──────────────────────────────────────────
   const hapusSnack = async (snackId: string) => {
     const { error } = await supabase
@@ -253,7 +271,7 @@ export function useKantin() {
     fetchSesiList, fetchSesiDetail,
     buatSesi, editSesi, hapusSesi,
     tambahPenitip, tambahSnack,
-    updateTerjual, hapusSnack, hapusPenitip,
+    updateTerjual, editSnack, hapusSnack, hapusPenitip,
     selesaikanSesi, totalKomisiSesi,
     today: format(new Date(), "yyyy-MM-dd"),
   };

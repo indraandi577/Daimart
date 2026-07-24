@@ -40,7 +40,8 @@ export default function InputTerjualModal({ penitip, onClose, onSubmit }: InputT
             const totalLaku = qty * snack.harga_jual;
             const komisi = Math.round(totalLaku * snack.komisi_pct / 100);
             const uangPenitipAsli = totalLaku - komisi;
-            const uangPenitip = bulatkan500(uangPenitipAsli);
+            // Catatan: pembulatan ke 500 dilakukan di TOTAL per penitip, bukan per item
+            const uangPenitip = uangPenitipAsli;
 
             return (
               <div key={snack.id} className="bg-gray-50 rounded-xl p-4">
@@ -79,31 +80,19 @@ export default function InputTerjualModal({ penitip, onClose, onSubmit }: InputT
                   </div>
                 </div>
 
-                {/* Preview real-time */}
                 {qty > 0 && (
-                  <div className="mt-3 space-y-2 text-xs">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-green-50 rounded-lg px-3 py-2 text-center">
-                        <p className="text-gray-500">Total Laku</p>
-                        <p className="font-bold text-green-700">{formatRupiah(totalLaku)}</p>
-                      </div>
-                      <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
-                        <p className="text-gray-500">Komisi ({snack.komisi_pct}%)</p>
-                        <p className="font-bold text-amber-600">{formatRupiah(komisi)}</p>
-                      </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                    <div className="bg-green-50 rounded-lg px-3 py-2 text-center">
+                      <p className="text-gray-500">Total Laku</p>
+                      <p className="font-bold text-green-700">{formatRupiah(totalLaku)}</p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-center">
-                        <p className="text-gray-400">Uang Penitip (Asli)</p>
-                        <p className="font-semibold text-gray-500 line-through">{formatRupiah(uangPenitipAsli)}</p>
-                      </div>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-center">
-                        <p className="text-blue-500 font-medium">Uang Penitip (Bulat)</p>
-                        <p className="font-bold text-blue-700">{formatRupiah(uangPenitip)}</p>
-                        {uangPenitip !== uangPenitipAsli && (
-                          <p className="text-blue-400 text-xs mt-0.5">dibulatkan ke 500</p>
-                        )}
-                      </div>
+                    <div className="bg-amber-50 rounded-lg px-3 py-2 text-center">
+                      <p className="text-gray-500">Komisi ({snack.komisi_pct}%)</p>
+                      <p className="font-bold text-amber-600">{formatRupiah(komisi)}</p>
+                    </div>
+                    <div className="bg-blue-50 rounded-lg px-3 py-2 text-center">
+                      <p className="text-gray-500">Uang Penitip</p>
+                      <p className="font-bold text-blue-700">{formatRupiah(uangPenitip)}</p>
                     </div>
                   </div>
                 )}

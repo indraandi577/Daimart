@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Plus, CheckCircle, Trash2, ShoppingBag, Edit2 } from "lucide-react";
 import Button from "@/components/ui/Button";
-import { useKantin, KantinPenitip, totalPenitip } from "@/lib/hooks/useKantin";
+import { useKantin, KantinPenitip, KantinSnack, totalPenitip } from "@/lib/hooks/useKantin";
 import { formatRupiah } from "@/lib/utils";
 import { format } from "date-fns";
 import { id } from "date-fns/locale";
 import TambahPenitipModal from "./TambahPenitipModal";
 import InputTerjualModal from "./InputTerjualModal";
 import RekapSesiModal from "./RekapSesiModal";
+import EditSnackModal from "./EditSnackModal";
 import toast from "react-hot-toast";
 
 interface SesiDetailProps {
@@ -21,12 +22,13 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
   const {
     activeSesi, penitips, loading,
     fetchSesiDetail, tambahPenitip, tambahSnack,
-    hapusPenitip, hapusSnack, updateTerjual,
+    hapusPenitip, hapusSnack, editSnack, updateTerjual,
     selesaikanSesi, totalKomisiSesi,
   } = useKantin();
 
   const [tambahPenitipOpen, setTambahPenitipOpen] = useState(false);
   const [inputTerjualPenitip, setInputTerjualPenitip] = useState<KantinPenitip | null>(null);
+  const [editSnackData, setEditSnackData] = useState<KantinSnack | null>(null);
   const [rekapOpen, setRekapOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -233,20 +235,29 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                           </td>
                           {!isSelesai && (
                             <td>
-                              <button
-                                onClick={async () => {
-                                  if (!confirm(`Hapus snack "${snack.nama_snack}"?`)) return;
-                                  try {
-                                    await hapusSnack(snack.id);
-                                    await fetchSesiDetail(sesiId);
-                                  } catch (err) {
-                                    toast.error((err as Error).message);
-                                  }
-                                }}
-                                className="p-1 text-gray-300 hover:text-red-500 transition-colors"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setEditSnackData(snack)}
+                                  className="p-1 text-gray-300 hover:text-blue-500 transition-colors"
+                                  title="Edit snack"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={async () => {
+                                    if (!confirm(`Hapus snack "${snack.nama_snack}"?`)) return;
+                                    try {
+                                      await hapusSnack(snack.id);
+                                      await fetchSesiDetail(sesiId);
+                                    } catch (err) {
+                                      toast.error((err as Error).message);
+                                    }
+                                  }}
+                                  className="p-1 text-gray-300 hover:text-red-500 transition-colors"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -327,6 +338,19 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
           sesi={activeSesi!}
           penitips={penitips}
           onClose={() => setRekapOpen(false)}
+        />
+      )}
+
+      {/* Modal Edit Snack */}
+      {editSnackData && (
+        <EditSnackModal
+          snack={editSnackData}
+          onClose={() => setEditSnackData(null)}
+          onSave={async (snackId, data) => {
+            await editSnack(snackId, data);
+            await fetchSesiDetail(sesiId);
+            setEditSnackData(null);
+          }}
         />
       )}
     </div>
