@@ -245,10 +245,12 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
                         <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-bold flex-shrink-0">
                           {m.nama.split(" ").map((w) => w[0]).slice(0, 2).join("")}
                         </div>
-                        <div className="flex-1 min-w-0">
+                        <div>
                           <p className="text-sm font-medium text-gray-800">{m.nama}</p>
                           <p className="text-xs text-gray-400">
-                            {m.kode_member} · Saldo: {formatRupiah(m.saldo)}
+                            {m.kode_member}
+                            {m.nipy && <span className="ml-1 font-mono text-blue-500">· {m.nipy}</span>}
+                            {" · "}Saldo: {formatRupiah(m.saldo)}
                           </p>
                         </div>
                       </button>

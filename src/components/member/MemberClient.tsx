@@ -162,6 +162,11 @@ export default function MemberClient() {
                         <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
                           {member.kode_member}
                         </span>
+                        {member.nipy && (
+                          <span className="text-xs font-mono text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                            {member.nipy}
+                          </span>
+                        )}
                         {!member.is_active && <Badge variant="default">Nonaktif</Badge>}
                       </div>
                       <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">

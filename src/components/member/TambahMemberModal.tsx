@@ -6,11 +6,11 @@ import Button from "@/components/ui/Button";
 
 interface TambahMemberModalProps {
   onClose: () => void;
-  onSubmit: (data: { nama: string; jabatan?: string; topup_bulanan: number }) => Promise<void>;
+  onSubmit: (data: { nama: string; nipy?: string; jabatan?: string; topup_bulanan: number }) => Promise<void>;
 }
 
 export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberModalProps) {
-  const [form, setForm] = useState({ nama: "", jabatan: "", topup_bulanan: 0 });
+  const [form, setForm] = useState({ nama: "", nipy: "", jabatan: "", topup_bulanan: 0 });
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -18,6 +18,7 @@ export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberMod
     setSaving(true);
     await onSubmit({
       nama: form.nama,
+      nipy: form.nipy || undefined,
       jabatan: form.jabatan || undefined,
       topup_bulanan: form.topup_bulanan,
     });
@@ -36,6 +37,19 @@ export default function TambahMemberModal({ onClose, onSubmit }: TambahMemberMod
             placeholder="Contoh: Bu Sri Wahyuni"
             className="input-base"
           />
+        </div>
+
+        <div>
+          <label className="label-base">NIPY <span className="text-gray-400 font-normal">(Nomor Induk Pegawai Yayasan)</span></label>
+          <input
+            value={form.nipy}
+            onChange={(e) => setForm({ ...form, nipy: e.target.value })}
+            placeholder="Contoh: 2024001234"
+            className="input-base font-mono"
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            NIPY akan digunakan sebagai kode barcode kartu member
+          </p>
         </div>
 
         <div>

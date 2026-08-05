@@ -23,7 +23,7 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
     activeSesi, penitips, loading,
     fetchSesiDetail, tambahPenitip, tambahSnack,
     hapusPenitip, hapusSnack, editSnack, updateTerjual,
-    selesaikanSesi, totalKomisiSesi,
+    selesaikanSesi, totalOmsetSesi,
   } = useKantin();
 
   const [tambahPenitipOpen, setTambahPenitipOpen] = useState(false);
@@ -34,7 +34,7 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
 
   useEffect(() => { fetchSesiDetail(sesiId); }, [fetchSesiDetail, sesiId]);
 
-  const totalKomisi = totalKomisiSesi(penitips);
+  const totalOmset = totalOmsetSesi(penitips);
   const isSelesai = activeSesi?.status === "selesai";
 
   const handleSelesaikan = async () => {
@@ -56,10 +56,7 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onBack}
-            className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors"
-          >
+          <button onClick={onBack} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
@@ -69,41 +66,30 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                 : "Memuat..."}
             </h1>
             <p className="text-sm text-gray-400 mt-0.5">
-              {isSelesai ? "✅ Sesi selesai" : "🍱 Sesi aktif · " + penitips.length + " penitip"}
+              {isSelesai ? "✅ Sesi selesai" : `🍱 Sesi aktif · ${penitips.length} penitip`}
             </p>
           </div>
         </div>
 
         <div className="flex gap-2">
           {isSelesai ? (
-            <Button variant="secondary" onClick={() => setRekapOpen(true)}>
-              Lihat Rekap
-            </Button>
+            <Button variant="secondary" onClick={() => setRekapOpen(true)}>Lihat Rekap</Button>
           ) : (
             <>
-              <Button
-                variant="secondary"
-                onClick={() => setTambahPenitipOpen(true)}
-                disabled={loading}
-              >
-                <Plus className="w-4 h-4" />
-                Tambah Penitip
+              <Button variant="secondary" onClick={() => setTambahPenitipOpen(true)} disabled={loading}>
+                <Plus className="w-4 h-4" /> Tambah Penitip
               </Button>
-              <Button
-                onClick={handleSelesaikan}
-                loading={saving}
+              <Button onClick={handleSelesaikan} loading={saving}
                 disabled={penitips.length === 0}
-                className="bg-amber-500 hover:bg-amber-600"
-              >
-                <CheckCircle className="w-4 h-4" />
-                Selesaikan Sesi
+                className="bg-amber-500 hover:bg-amber-600">
+                <CheckCircle className="w-4 h-4" /> Selesaikan Sesi
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {/* Summary bar */}
+      {/* Summary */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="card p-4 text-center">
           <p className="text-xs text-gray-500 mb-1">Penitip</p>
@@ -117,13 +103,13 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
         </div>
         <div className="card p-4 text-center">
           <p className="text-xs text-gray-500 mb-1">Total Terjual</p>
-          <p className="text-2xl font-bold text-green-700">
+          <p className="text-xl font-bold text-green-700">
             {formatRupiah(penitips.reduce((s, p) => s + totalPenitip(p).total_laku, 0))}
           </p>
         </div>
         <div className="card p-4 text-center">
-          <p className="text-xs text-gray-500 mb-1">Komisi Kantin</p>
-          <p className="text-2xl font-bold text-amber-600">{formatRupiah(totalKomisi)}</p>
+          <p className="text-xs text-gray-500 mb-1">Omset Kantin</p>
+          <p className="text-xl font-bold text-amber-600">{formatRupiah(totalOmset)}</p>
         </div>
       </div>
 
@@ -151,7 +137,7 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                   <div className="flex items-center gap-2">
                     <span className="text-lg">👤</span>
                     <span className="font-semibold text-gray-800">{penitip.nama}</span>
-                    <span className="text-xs text-gray-400">({penitip.snacks.length} jenis snack)</span>
+                    <span className="text-xs text-gray-400">({penitip.snacks.length} jenis)</span>
                   </div>
                   <div className="flex items-center gap-2">
                     {!isSelesai && (
@@ -163,19 +149,13 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                               await hapusPenitip(penitip.id);
                               await fetchSesiDetail(sesiId);
                               toast.success("Penitip dihapus");
-                            } catch (err) {
-                              toast.error((err as Error).message);
-                            }
+                            } catch (err) { toast.error((err as Error).message); }
                           }}
                           className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setInputTerjualPenitip(penitip)}
-                        >
+                        <Button size="sm" variant="outline" onClick={() => setInputTerjualPenitip(penitip)}>
                           Input Terjual
                         </Button>
                       </>
@@ -189,14 +169,14 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                     <thead>
                       <tr>
                         <th>Nama Snack</th>
-                        <th className="text-right">Harga</th>
+                        <th className="text-right">Harga Beli</th>
+                        <th className="text-right">Harga Jual</th>
                         <th className="text-center">Titip</th>
                         <th className="text-center">Terjual</th>
                         <th className="text-center">Sisa</th>
+                        <th className="text-right">Balik Modal</th>
                         <th className="text-right">Total Laku</th>
-                        <th className="text-right">Komisi {penitip.snacks[0]?.komisi_pct ?? 15}%</th>
-                        <th className="text-right">Uang Penitip (Asli)</th>
-                        <th className="text-right">Uang Penitip (Bulat)</th>
+                        <th className="text-right">Omset Kantin</th>
                         {!isSelesai && <th />}
                       </tr>
                     </thead>
@@ -204,6 +184,7 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                       {penitip.snacks.map((snack) => (
                         <tr key={snack.id}>
                           <td className="font-medium text-gray-800">{snack.nama_snack}</td>
+                          <td className="text-right text-gray-500 text-xs">{formatRupiah(snack.harga_beli)}</td>
                           <td className="text-right text-gray-600">{formatRupiah(snack.harga_jual)}</td>
                           <td className="text-center text-gray-600">{snack.qty_titip}</td>
                           <td className="text-center">
@@ -216,31 +197,14 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                               {snack.qty_sisa}
                             </span>
                           </td>
-                          <td className="text-right font-semibold text-green-700">
-                            {formatRupiah(snack.total_laku)}
-                          </td>
-                          <td className="text-right text-amber-600">
-                            {formatRupiah(snack.komisi_kantin)}
-                          </td>
-                          <td className="text-right text-gray-500 text-xs">
-                            {formatRupiah(snack.uang_penitip_asli)}
-                          </td>
-                          <td className="text-right font-bold text-gray-800">
-                            {formatRupiah(snack.uang_penitip)}
-                            {snack.uang_penitip !== snack.uang_penitip_asli && (
-                              <span className="block text-xs text-blue-500 font-normal">
-                                dibulatkan
-                              </span>
-                            )}
-                          </td>
+                          <td className="text-right text-gray-600">{formatRupiah(snack.total_modal)}</td>
+                          <td className="text-right font-semibold text-green-700">{formatRupiah(snack.total_laku)}</td>
+                          <td className="text-right font-bold text-amber-600">{formatRupiah(snack.omset_kantin)}</td>
                           {!isSelesai && (
                             <td>
                               <div className="flex items-center gap-1">
-                                <button
-                                  onClick={() => setEditSnackData(snack)}
-                                  className="p-1 text-gray-300 hover:text-blue-500 transition-colors"
-                                  title="Edit snack"
-                                >
+                                <button onClick={() => setEditSnackData(snack)}
+                                  className="p-1 text-gray-300 hover:text-blue-500 transition-colors" title="Edit snack">
                                   <Edit2 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
@@ -249,12 +213,9 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                                     try {
                                       await hapusSnack(snack.id);
                                       await fetchSesiDetail(sesiId);
-                                    } catch (err) {
-                                      toast.error((err as Error).message);
-                                    }
+                                    } catch (err) { toast.error((err as Error).message); }
                                   }}
-                                  className="p-1 text-gray-300 hover:text-red-500 transition-colors"
-                                >
+                                  className="p-1 text-gray-300 hover:text-red-500 transition-colors">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
@@ -263,24 +224,13 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
                         </tr>
                       ))}
                     </tbody>
-                    {/* Footer per penitip */}
+                    {/* Footer */}
                     <tfoot>
                       <tr className="bg-gray-50 font-bold text-sm">
-                        <td colSpan={5} className="px-4 py-2.5 text-gray-600">
-                          Total {penitip.nama}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-green-700">
-                          {formatRupiah(tot.total_laku)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-amber-600">
-                          {formatRupiah(tot.komisi_kantin)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-500 text-xs font-normal">
-                          {formatRupiah(tot.uang_penitip_asli)}
-                        </td>
-                        <td className="px-4 py-2.5 text-right text-gray-800">
-                          {formatRupiah(tot.uang_penitip)}
-                        </td>
+                        <td colSpan={6} className="px-4 py-2.5 text-gray-600">Total {penitip.nama}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-600">{formatRupiah(tot.total_modal)}</td>
+                        <td className="px-4 py-2.5 text-right text-green-700">{formatRupiah(tot.total_laku)}</td>
+                        <td className="px-4 py-2.5 text-right text-amber-600">{formatRupiah(tot.omset_kantin)}</td>
                         {!isSelesai && <td />}
                       </tr>
                     </tfoot>
@@ -292,56 +242,41 @@ export default function SesiDetail({ sesiId, onBack }: SesiDetailProps) {
         </div>
       )}
 
-      {/* Modal Tambah Penitip */}
+      {/* Modals */}
       {tambahPenitipOpen && (
         <TambahPenitipModal
           onClose={() => setTambahPenitipOpen(false)}
           onSubmit={async (nama, snacks) => {
             try {
               const penitip = await tambahPenitip(sesiId, nama);
-              for (const s of snacks) {
-                await tambahSnack(penitip.id, s);
-              }
+              for (const s of snacks) await tambahSnack(penitip.id, s);
               await fetchSesiDetail(sesiId);
               toast.success(`Penitip ${nama} ditambahkan`);
               setTambahPenitipOpen(false);
-            } catch (err) {
-              toast.error((err as Error).message);
-            }
+            } catch (err) { toast.error((err as Error).message); }
           }}
         />
       )}
 
-      {/* Modal Input Terjual */}
       {inputTerjualPenitip && (
         <InputTerjualModal
           penitip={inputTerjualPenitip}
           onClose={() => setInputTerjualPenitip(null)}
           onSubmit={async (updates) => {
             try {
-              for (const { snackId, qty } of updates) {
-                await updateTerjual(snackId, qty);
-              }
+              for (const { snackId, qty } of updates) await updateTerjual(snackId, qty);
               await fetchSesiDetail(sesiId);
               toast.success("Data terjual disimpan");
               setInputTerjualPenitip(null);
-            } catch (err) {
-              toast.error((err as Error).message);
-            }
+            } catch (err) { toast.error((err as Error).message); }
           }}
         />
       )}
 
-      {/* Modal Rekap */}
       {rekapOpen && (
-        <RekapSesiModal
-          sesi={activeSesi!}
-          penitips={penitips}
-          onClose={() => setRekapOpen(false)}
-        />
+        <RekapSesiModal sesi={activeSesi!} penitips={penitips} onClose={() => setRekapOpen(false)} />
       )}
 
-      {/* Modal Edit Snack */}
       {editSnackData && (
         <EditSnackModal
           snack={editSnackData}

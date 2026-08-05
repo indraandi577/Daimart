@@ -25,6 +25,7 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
   const [editMode, setEditMode] = useState(false);
   const [editForm, setEditForm] = useState({
     nama: member.nama,
+    nipy: member.nipy ?? "",
     jabatan: member.jabatan ?? "",
     topup_bulanan: member.topup_bulanan,
     is_active: member.is_active,
@@ -52,7 +53,10 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
   const handleSaveEdit = async () => {
     setSaving(true);
     try {
-      await updateMember(member.id, editForm);
+      await updateMember(member.id, {
+        ...editForm,
+        nipy: editForm.nipy || null,
+      });
       toast.success("Data member diperbarui");
       setEditMode(false);
       await reload();
@@ -102,6 +106,7 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
               {editMode ? (
                 <div className="space-y-2">
                   <input value={editForm.nama} onChange={(e) => setEditForm({ ...editForm, nama: e.target.value })} className="input-base text-sm" placeholder="Nama" />
+                  <input value={editForm.nipy} onChange={(e) => setEditForm({ ...editForm, nipy: e.target.value })} className="input-base text-sm font-mono" placeholder="NIPY (opsional)" />
                   <input value={editForm.jabatan} onChange={(e) => setEditForm({ ...editForm, jabatan: e.target.value })} className="input-base text-sm" placeholder="Jabatan" />
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
@@ -136,6 +141,11 @@ export default function MemberDetailModal({ member, onClose }: MemberDetailModal
                   <p className="text-sm text-gray-500">{detail?.jabatan ?? "—"}</p>
                   <div className="flex items-center gap-3 mt-1 text-xs text-gray-400 flex-wrap">
                     <span className="font-mono bg-gray-100 px-2 py-0.5 rounded-full">{member.kode_member}</span>
+                    {detail?.nipy && (
+                      <span className="font-mono bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">
+                        NIPY: {detail.nipy}
+                      </span>
+                    )}
                     <span>🛒 {detail?.total_transaksi ?? 0}x belanja</span>
                     <span className="text-blue-500">+{formatRupiah(detail?.topup_bulanan ?? 0)}/bln</span>
                   </div>

@@ -14,9 +14,8 @@ interface RekapSesiModalProps {
 }
 
 export default function RekapSesiModal({ sesi, penitips, onClose }: RekapSesiModalProps) {
-  const totalKomisi = penitips.reduce((s, p) => s + totalPenitip(p).komisi_kantin, 0);
-  const totalUangPenitipAsli = penitips.reduce((s, p) => s + totalPenitip(p).uang_penitip_asli, 0);
-  const totalUangPenitip = penitips.reduce((s, p) => s + totalPenitip(p).uang_penitip, 0);
+  const totalOmsetKantin = penitips.reduce((s, p) => s + totalPenitip(p).omset_kantin, 0);
+  const totalModalPenitip = penitips.reduce((s, p) => s + totalPenitip(p).total_modal, 0);
   const totalLaku = penitips.reduce((s, p) => s + totalPenitip(p).total_laku, 0);
 
   return (
@@ -32,17 +31,17 @@ export default function RekapSesiModal({ sesi, penitips, onClose }: RekapSesiMod
 
         {/* Summary */}
         <div className="grid grid-cols-3 gap-3">
-          <div className="bg-green-50 rounded-xl p-3 text-center">
-            <p className="text-xs text-gray-500">Total Terjual</p>
-            <p className="font-bold text-green-700 text-sm mt-1">{formatRupiah(totalLaku)}</p>
-          </div>
-          <div className="bg-amber-50 rounded-xl p-3 text-center">
-            <p className="text-xs text-gray-500">Omset Kantin</p>
-            <p className="font-bold text-amber-600 text-sm mt-1">{formatRupiah(totalKomisi)}</p>
-          </div>
           <div className="bg-blue-50 rounded-xl p-3 text-center">
-            <p className="text-xs text-gray-500">Bayar ke Penitip</p>
-            <p className="font-bold text-blue-700 text-sm mt-1">{formatRupiah(totalUangPenitip)}</p>
+            <p className="text-xs text-gray-500">Total Laku</p>
+            <p className="font-bold text-blue-700 text-sm mt-1">{formatRupiah(totalLaku)}</p>
+          </div>
+          <div className="bg-green-50 rounded-xl p-3 text-center">
+            <p className="text-xs text-gray-500">Omset Kantin</p>
+            <p className="font-bold text-green-700 text-sm mt-1">{formatRupiah(totalOmsetKantin)}</p>
+          </div>
+          <div className="bg-gray-50 rounded-xl p-3 text-center">
+            <p className="text-xs text-gray-500">Balik Modal Penitip</p>
+            <p className="font-bold text-gray-700 text-sm mt-1">{formatRupiah(totalModalPenitip)}</p>
           </div>
         </div>
 
@@ -60,16 +59,12 @@ export default function RekapSesiModal({ sesi, penitips, onClose }: RekapSesiMod
                 <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50">
                   <span className="font-semibold text-gray-800">👤 {penitip.nama}</span>
                   <div className="flex gap-3 text-xs items-center">
-                    <div className="text-right">
-                      {tot.uang_penitip !== tot.uang_penitip_asli && (
-                        <p className="text-gray-400 line-through text-xs">
-                          asli: {formatRupiah(tot.uang_penitip_asli)}
-                        </p>
-                      )}
-                      <span className="text-green-700 font-semibold">
-                        Dapat: {formatRupiah(tot.uang_penitip)}
-                      </span>
-                    </div>
+                    <span className="text-gray-700 font-semibold">
+                      Balik modal: {formatRupiah(tot.total_modal)}
+                    </span>
+                    <span className="text-green-700 font-semibold">
+                      Omset kantin: {formatRupiah(tot.omset_kantin)}
+                    </span>
                     {totalSisa > 0 && (
                       <span className="text-amber-600">
                         Sisa: {totalSisa} pcs dikembalikan
@@ -85,22 +80,17 @@ export default function RekapSesiModal({ sesi, penitips, onClose }: RekapSesiMod
                       <div className="flex-1">
                         <span className="text-gray-700">{snack.nama_snack}</span>
                         <span className="text-gray-400 ml-2 text-xs">
-                          {snack.qty_terjual}/{snack.qty_titip} terjual · {formatRupiah(snack.harga_jual)}/pcs
+                          {snack.qty_terjual}/{snack.qty_titip} terjual ·
+                          beli {formatRupiah(snack.harga_beli)} · jual {formatRupiah(snack.harga_jual)}
                         </span>
                       </div>
                       <div className="flex gap-4 text-xs items-center">
-                        <span className="text-green-600">{formatRupiah(snack.total_laku)}</span>
-                        <span className="text-amber-500">-{formatRupiah(snack.komisi_kantin)}</span>
-                        <div className="text-right">
-                          {snack.uang_penitip !== snack.uang_penitip_asli && (
-                            <p className="text-gray-400 line-through text-xs">
-                              {formatRupiah(snack.uang_penitip_asli)}
-                            </p>
-                          )}
-                          <span className="font-semibold text-gray-800">
-                            {formatRupiah(snack.uang_penitip)}
-                          </span>
-                        </div>
+                        <span className="text-gray-500">
+                          modal: {formatRupiah(snack.total_modal)}
+                        </span>
+                        <span className="text-green-600 font-semibold">
+                          +{formatRupiah(snack.omset_kantin)}
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -113,16 +103,12 @@ export default function RekapSesiModal({ sesi, penitips, onClose }: RekapSesiMod
         {/* Footer total */}
         <div className="border-t-2 border-dashed border-gray-200 pt-4 space-y-1.5">
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Total uang ke penitip (asli)</span>
-            <span className="text-gray-400 line-through">{formatRupiah(totalUangPenitipAsli)}</span>
+            <span className="text-gray-500">Total uang dikembalikan ke penitip (balik modal)</span>
+            <span className="font-bold text-gray-700">{formatRupiah(totalModalPenitip)}</span>
           </div>
           <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Total uang ke penitip (dibulatkan ke 500)</span>
-            <span className="font-bold text-blue-700">{formatRupiah(totalUangPenitip)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-gray-500">Omset kantin (komisi)</span>
-            <span className="font-bold text-amber-600">{formatRupiah(totalKomisi)}</span>
+            <span className="text-gray-500">Omset kantin (keuntungan jual - beli)</span>
+            <span className="font-bold text-green-700">{formatRupiah(totalOmsetKantin)}</span>
           </div>
         </div>
 

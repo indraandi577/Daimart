@@ -8,9 +8,9 @@ import { formatRupiah } from "@/lib/utils";
 
 interface SnackForm {
   nama_snack: string;
+  harga_beli: number;
   harga_jual: number;
   qty_titip: number;
-  komisi_pct: number;
 }
 
 interface TambahPenitipModalProps {
@@ -20,9 +20,9 @@ interface TambahPenitipModalProps {
 
 const defaultSnack = (): SnackForm => ({
   nama_snack: "",
+  harga_beli: 0,
   harga_jual: 0,
   qty_titip: 0,
-  komisi_pct: 15,
 });
 
 export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipModalProps) {
@@ -40,8 +40,16 @@ export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipM
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nama.trim()) return;
-    if (snacks.some((s) => !s.nama_snack || s.harga_jual <= 0 || s.qty_titip <= 0)) {
+    const invalid = snacks.some(
+      (s) => !s.nama_snack || s.harga_beli <= 0 || s.harga_jual <= 0 || s.qty_titip <= 0
+    );
+    if (invalid) {
       alert("Lengkapi semua data snack terlebih dahulu");
+      return;
+    }
+    const hasNegMargin = snacks.some((s) => s.harga_beli >= s.harga_jual);
+    if (hasNegMargin) {
+      alert("Harga jual harus lebih besar dari harga beli di semua snack");
       return;
     }
     setSaving(true);
@@ -77,85 +85,86 @@ export default function TambahPenitipModal({ onClose, onSubmit }: TambahPenitipM
             </button>
           </div>
 
-          {/* Area scroll untuk snack list */}
-          <div className="max-h-80 overflow-y-auto pr-1 space-y-3">
-            {snacks.map((snack, idx) => (
-              <div key={idx} className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-gray-500 uppercase">
-                    Snack {idx + 1}
-                  </span>
-                  {snacks.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeSnack(idx)}
-                      className="text-gray-400 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+          <div className="max-h-96 overflow-y-auto pr-1 space-y-3">
+            {snacks.map((snack, idx) => {
+              const margin = snack.harga_jual - snack.harga_beli;
+              return (
+                <div key={idx} className="bg-gray-50 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-500 uppercase">
+                      Snack {idx + 1}
+                    </span>
+                    {snacks.length > 1 && (
+                      <button type="button" onClick={() => removeSnack(idx)}
+                        className="text-gray-400 hover:text-red-500 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="label-base">Nama Snack</label>
+                    <input
+                      value={snack.nama_snack}
+                      onChange={(e) => updateSnack(idx, "nama_snack", e.target.value)}
+                      required
+                      placeholder="Contoh: Risol Mayo, Cireng, Batagor..."
+                      className="input-base"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="label-base">Harga Beli (Rp)</label>
+                      <input type="number"
+                        value={snack.harga_beli || ""}
+                        onChange={(e) => updateSnack(idx, "harga_beli", Number(e.target.value))}
+                        required min={1} placeholder="1500"
+                        className="input-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="label-base">Harga Jual (Rp)</label>
+                      <input type="number"
+                        value={snack.harga_jual || ""}
+                        onChange={(e) => updateSnack(idx, "harga_jual", Number(e.target.value))}
+                        required min={1} placeholder="2000"
+                        className="input-base"
+                      />
+                    </div>
+                    <div>
+                      <label className="label-base">Qty Titip</label>
+                      <input type="number"
+                        value={snack.qty_titip || ""}
+                        onChange={(e) => updateSnack(idx, "qty_titip", Number(e.target.value))}
+                        required min={1} placeholder="20"
+                        className="input-base"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Preview */}
+                  {margin > 0 && snack.qty_titip > 0 && (
+                    <div className="text-xs bg-white rounded-lg px-3 py-2 flex gap-4 flex-wrap">
+                      <span>
+                        Keuntungan/pcs: <b className="text-green-700">{formatRupiah(margin)}</b>
+                      </span>
+                      <span>
+                        Max omset kantin: <b className="text-amber-600">
+                          {formatRupiah(margin * snack.qty_titip)}
+                        </b>
+                      </span>
+                    </div>
+                  )}
+                  {snack.harga_beli > 0 && snack.harga_jual > 0 && snack.harga_beli >= snack.harga_jual && (
+                    <p className="text-xs text-red-500">⚠️ Harga jual harus lebih besar dari harga beli!</p>
                   )}
                 </div>
-
-                <div>
-                  <label className="label-base">Nama Snack</label>
-                  <input
-                    value={snack.nama_snack}
-                    onChange={(e) => updateSnack(idx, "nama_snack", e.target.value)}
-                    required
-                    placeholder="Contoh: Risol Mayo, Cireng, Batagor..."
-                    className="input-base"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="label-base">Harga Jual (Rp)</label>
-                    <input
-                      type="number"
-                      value={snack.harga_jual || ""}
-                      onChange={(e) => updateSnack(idx, "harga_jual", Number(e.target.value))}
-                      required min={1}
-                      placeholder="2000"
-                      className="input-base"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-base">Qty Titip</label>
-                    <input
-                      type="number"
-                      value={snack.qty_titip || ""}
-                      onChange={(e) => updateSnack(idx, "qty_titip", Number(e.target.value))}
-                      required min={1}
-                      placeholder="20"
-                      className="input-base"
-                    />
-                  </div>
-                  <div>
-                    <label className="label-base">Komisi Kantin (%)</label>
-                    <input
-                      type="number"
-                      value={snack.komisi_pct}
-                      onChange={(e) => updateSnack(idx, "komisi_pct", Number(e.target.value))}
-                      min={0} max={100}
-                      className="input-base"
-                    />
-                  </div>
-                </div>
-
-                {/* Preview hitung */}
-                {snack.harga_jual > 0 && snack.qty_titip > 0 && (
-                  <div className="text-xs text-gray-500 bg-white rounded-lg px-3 py-2 flex gap-4 flex-wrap">
-                    <span>Max laku: <b className="text-green-700">{formatRupiah(snack.harga_jual * snack.qty_titip)}</b></span>
-                    <span>Komisi kantin: <b className="text-amber-600">{snack.komisi_pct}%</b></span>
-                    <span>Penitip dapat: <b className="text-gray-700">{100 - snack.komisi_pct}%</b></span>
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
-          {/* Info jumlah snack */}
           <p className="text-xs text-gray-400 mt-2 text-center">
-            {snacks.length} jenis snack · scroll ke bawah untuk melihat semua
+            {snacks.length} jenis snack · scroll untuk melihat semua
           </p>
         </div>
 

@@ -7,6 +7,7 @@ import toast from "react-hot-toast";
 export interface Member {
   id: string;
   nama: string;
+  nipy: string | null;       // Nomor Induk Pegawai — jadi kode barcode kartu member
   kode_member: string;
   jabatan: string | null;
   topup_bulanan: number;
@@ -125,7 +126,7 @@ export function useMember() {
     const { data } = await supabase
       .from("members").select("*")
       .eq("is_active", true)
-      .or(`nama.ilike.%${query}%,kode_member.ilike.%${query}%`)
+      .or(`nama.ilike.%${query}%,kode_member.ilike.%${query}%,nipy.ilike.%${query}%`)
       .limit(10);
     return data ?? [];
   };
@@ -133,15 +134,26 @@ export function useMember() {
   // ── Tambah member baru ───────────────────────────────────
   const tambahMember = async (data: {
     nama: string;
+    nipy?: string;
     jabatan?: string;
     topup_bulanan: number;
   }) => {
+    // Cek duplikat NIPY
+    if (data.nipy) {
+      const { data: existing } = await supabase
+        .from("members").select("id").eq("nipy", data.nipy).single();
+      if (existing) throw new Error(`NIPY ${data.nipy} sudah terdaftar`);
+    }
+
     const { count } = await supabase
       .from("members").select("id", { count: "exact", head: true });
     const kode = `MBR-${String((count ?? 0) + 1).padStart(3, "0")}`;
 
     const { error } = await supabase.from("members").insert({
-      ...data, kode_member: kode, saldo: 0,
+      ...data,
+      nipy: data.nipy || null,
+      kode_member: kode,
+      saldo: 0,
     });
     if (error) throw new Error(error.message);
     toast.success(`Member ${data.nama} ditambahkan (${kode})`);

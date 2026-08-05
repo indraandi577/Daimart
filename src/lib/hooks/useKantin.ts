@@ -5,11 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 
+// ================================================================
+// TYPES
+// ================================================================
+
 export interface KantinSesi {
   id: string;
   tanggal: string;
   catatan: string | null;
   status: "aktif" | "selesai";
+  komisi_total: number;
   created_at: string;
 }
 
@@ -24,54 +29,44 @@ export interface KantinSnack {
   id: string;
   penitip_id: string;
   nama_snack: string;
-  harga_jual: number;
+  harga_beli: number;    // modal penitip
+  harga_jual: number;    // harga jual ke siswa
   qty_titip: number;
   qty_terjual: number;
-  komisi_pct: number;
   // Computed
   qty_sisa: number;
-  total_laku: number;
-  komisi_kantin: number;       // komisi asli (exact)
-  uang_penitip_asli: number;   // uang penitip sebelum dibulatkan
-  uang_penitip: number;        // uang penitip setelah dibulatkan ke 500 terdekat
+  total_modal: number;   // harga_beli × qty_terjual → uang kembali ke penitip
+  total_laku: number;    // harga_jual × qty_terjual
+  omset_kantin: number;  // (harga_jual - harga_beli) × qty_terjual → masuk kantin
 }
 
-/** Bulatkan ke 500 terdekat — contoh: 12.345 → 12.500, 12.200 → 12.000 */
-export function bulatkan500(nilai: number): number {
-  return Math.round(nilai / 500) * 500;
+// ================================================================
+// HELPERS
+// ================================================================
+
+export function computeSnack(
+  s: Omit<KantinSnack, "qty_sisa" | "total_modal" | "total_laku" | "omset_kantin">
+): KantinSnack {
+  const total_laku   = s.qty_terjual * s.harga_jual;
+  const total_modal  = s.qty_terjual * s.harga_beli;
+  const omset_kantin = total_laku - total_modal;
+  return { ...s, qty_sisa: s.qty_titip - s.qty_terjual, total_modal, total_laku, omset_kantin };
 }
 
-// Hitung derived fields snack — tanpa pembulatan, pembulatan di level penitip
-export function computeSnack(s: Omit<KantinSnack, "qty_sisa" | "total_laku" | "komisi_kantin" | "uang_penitip_asli" | "uang_penitip">): KantinSnack {
-  const total_laku = s.qty_terjual * s.harga_jual;
-  const komisi_kantin = Math.round(total_laku * s.komisi_pct / 100); // exact, tidak dibulatkan
-  const uang_penitip_asli = total_laku - komisi_kantin;
-  return {
-    ...s,
-    qty_sisa: s.qty_titip - s.qty_terjual,
-    total_laku,
-    komisi_kantin,
-    uang_penitip_asli,
-    uang_penitip: uang_penitip_asli, // sama dulu, pembulatan di totalPenitip
-  };
-}
-
-// Hitung total per penitip — pembulatan ke 500 dilakukan di TOTAL, bukan per item
 export function totalPenitip(penitip: KantinPenitip) {
-  const raw = penitip.snacks.reduce(
+  return penitip.snacks.reduce(
     (acc, s) => ({
-      total_laku: acc.total_laku + s.total_laku,
-      komisi_kantin: acc.komisi_kantin + s.komisi_kantin,
-      uang_penitip_asli: acc.uang_penitip_asli + s.uang_penitip_asli,
+      total_modal:   acc.total_modal   + s.total_modal,
+      total_laku:    acc.total_laku    + s.total_laku,
+      omset_kantin:  acc.omset_kantin  + s.omset_kantin,
     }),
-    { total_laku: 0, komisi_kantin: 0, uang_penitip_asli: 0 }
+    { total_modal: 0, total_laku: 0, omset_kantin: 0 }
   );
-  return {
-    ...raw,
-    // Bulatkan TOTAL ke 500 terdekat — bukan per item
-    uang_penitip: bulatkan500(raw.uang_penitip_asli),
-  };
 }
+
+// ================================================================
+// HOOK
+// ================================================================
 
 export function useKantin() {
   const [sesiList, setSesiList] = useState<KantinSesi[]>([]);
@@ -98,15 +93,12 @@ export function useKantin() {
     }
   }, [supabase]);
 
-  // ── Fetch detail sesi + penitip + snack ──────────────────
+  // ── Fetch detail sesi ─────────────────────────────────────
   const fetchSesiDetail = useCallback(async (sesiId: string) => {
     setLoading(true);
     try {
       const { data: sesi } = await supabase
-        .from("kantin_sesi")
-        .select("*")
-        .eq("id", sesiId)
-        .single();
+        .from("kantin_sesi").select("*").eq("id", sesiId).single();
       setActiveSesi(sesi);
 
       const { data: penitipData } = await supabase
@@ -128,20 +120,19 @@ export function useKantin() {
     }
   }, [supabase]);
 
-  // ── Buat sesi baru ───────────────────────────────────────
+  // ── Buat sesi ─────────────────────────────────────────────
   const buatSesi = async (tanggal: string, catatan?: string) => {
     const { data, error } = await supabase
       .from("kantin_sesi")
-      .insert({ tanggal, catatan: catatan || null, status: "aktif" })
-      .select()
-      .single();
+      .insert({ tanggal, catatan: catatan || null, status: "aktif", komisi_total: 0 })
+      .select().single();
     if (error) throw new Error(error.message);
     toast.success("Sesi kantin dibuat");
     await fetchSesiList();
     return data;
   };
 
-  // ── Edit sesi ────────────────────────────────────────────
+  // ── Edit sesi ─────────────────────────────────────────────
   const editSesi = async (sesiId: string, tanggal: string, catatan?: string) => {
     const { error } = await supabase
       .from("kantin_sesi")
@@ -152,53 +143,41 @@ export function useKantin() {
     await fetchSesiList();
   };
 
-  // ── Hapus sesi ───────────────────────────────────────────
+  // ── Hapus sesi ────────────────────────────────────────────
   const hapusSesi = async (sesiId: string) => {
-    // cascade delete akan hapus penitip & snack otomatis
     const { error } = await supabase
-      .from("kantin_sesi")
-      .delete()
-      .eq("id", sesiId);
+      .from("kantin_sesi").delete().eq("id", sesiId);
     if (error) throw new Error(error.message);
     toast.success("Sesi dihapus");
     await fetchSesiList();
   };
 
-  // ── Tambah penitip ke sesi ───────────────────────────────
+  // ── Tambah penitip ────────────────────────────────────────
   const tambahPenitip = async (sesiId: string, nama: string) => {
     const { data, error } = await supabase
       .from("kantin_penitip")
       .insert({ sesi_id: sesiId, nama })
-      .select()
-      .single();
+      .select().single();
     if (error) throw new Error(error.message);
     return { ...data, snacks: [] } as KantinPenitip;
   };
 
-  // ── Tambah snack ke penitip ──────────────────────────────
+  // ── Tambah snack ──────────────────────────────────────────
   const tambahSnack = async (penitipId: string, snack: {
     nama_snack: string;
+    harga_beli: number;
     harga_jual: number;
     qty_titip: number;
-    komisi_pct?: number;
   }) => {
     const { data, error } = await supabase
       .from("kantin_snack")
-      .insert({
-        penitip_id: penitipId,
-        nama_snack: snack.nama_snack,
-        harga_jual: snack.harga_jual,
-        qty_titip: snack.qty_titip,
-        qty_terjual: 0,
-        komisi_pct: snack.komisi_pct ?? 15,
-      })
-      .select()
-      .single();
+      .insert({ penitip_id: penitipId, qty_terjual: 0, ...snack })
+      .select().single();
     if (error) throw new Error(error.message);
     return computeSnack(data);
   };
 
-  // ── Update qty terjual ───────────────────────────────────
+  // ── Update qty terjual ────────────────────────────────────
   const updateTerjual = async (snackId: string, qtyTerjual: number) => {
     const { error } = await supabase
       .from("kantin_snack")
@@ -207,64 +186,55 @@ export function useKantin() {
     if (error) throw new Error(error.message);
   };
 
-  // ── Edit snack (nama, harga, qty titip, komisi) ──────────
+  // ── Edit snack ────────────────────────────────────────────
   const editSnack = async (snackId: string, data: {
     nama_snack: string;
+    harga_beli: number;
     harga_jual: number;
     qty_titip: number;
-    komisi_pct: number;
   }) => {
     const { error } = await supabase
-      .from("kantin_snack")
-      .update(data)
-      .eq("id", snackId);
+      .from("kantin_snack").update(data).eq("id", snackId);
     if (error) throw new Error(error.message);
     toast.success("Snack diperbarui");
   };
 
-  // ── Hapus snack ──────────────────────────────────────────
+  // ── Hapus snack ───────────────────────────────────────────
   const hapusSnack = async (snackId: string) => {
     const { error } = await supabase
-      .from("kantin_snack")
-      .delete()
-      .eq("id", snackId);
+      .from("kantin_snack").delete().eq("id", snackId);
     if (error) throw new Error(error.message);
   };
 
-  // ── Hapus penitip ────────────────────────────────────────
+  // ── Hapus penitip ─────────────────────────────────────────
   const hapusPenitip = async (penitipId: string) => {
     const { error } = await supabase
-      .from("kantin_penitip")
-      .delete()
-      .eq("id", penitipId);
+      .from("kantin_penitip").delete().eq("id", penitipId);
     if (error) throw new Error(error.message);
   };
 
-  // ── Selesaikan sesi ──────────────────────────────────────
+  // ── Selesaikan sesi ───────────────────────────────────────
   const selesaikanSesi = async (sesiId: string) => {
-    // Hitung total komisi sesi ini dari semua snack
     const { data: snacks } = await supabase
       .from("kantin_snack")
-      .select("qty_terjual, harga_jual, komisi_pct, penitip:kantin_penitip!inner(sesi_id)")
+      .select("qty_terjual, harga_beli, harga_jual, penitip:kantin_penitip!inner(sesi_id)")
       .eq("penitip.sesi_id", sesiId);
 
-    const komisiTotal = (snacks ?? []).reduce((sum, s) => {
-      const total_laku = s.qty_terjual * s.harga_jual;
-      const komisi_raw = total_laku * s.komisi_pct / 100;
-      return sum + Math.round(komisi_raw / 1000) * 1000;
+    const omsetTotal = (snacks ?? []).reduce((sum, s) => {
+      return sum + (s.harga_jual - s.harga_beli) * s.qty_terjual;
     }, 0);
 
     const { error } = await supabase
       .from("kantin_sesi")
-      .update({ status: "selesai", komisi_total: komisiTotal })
+      .update({ status: "selesai", komisi_total: omsetTotal })
       .eq("id", sesiId);
     if (error) throw new Error(error.message);
     toast.success("Sesi kantin diselesaikan");
   };
 
-  // ── Total omset kantin dari sesi ─────────────────────────
-  const totalKomisiSesi = (ps: KantinPenitip[]) =>
-    ps.reduce((sum, p) => sum + totalPenitip(p).komisi_kantin, 0);
+  // ── Total omset kantin dari sesi ──────────────────────────
+  const totalOmsetSesi = (ps: KantinPenitip[]) =>
+    ps.reduce((sum, p) => sum + totalPenitip(p).omset_kantin, 0);
 
   return {
     sesiList, activeSesi, penitips, loading,
@@ -272,7 +242,7 @@ export function useKantin() {
     buatSesi, editSesi, hapusSesi,
     tambahPenitip, tambahSnack,
     updateTerjual, editSnack, hapusSnack, hapusPenitip,
-    selesaikanSesi, totalKomisiSesi,
+    selesaikanSesi, totalOmsetSesi,
     today: format(new Date(), "yyyy-MM-dd"),
   };
 }
