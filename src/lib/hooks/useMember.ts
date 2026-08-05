@@ -169,6 +169,14 @@ export function useMember() {
     await fetchMembers();
   };
 
+  // ── Hapus member ──────────────────────────────────────────
+  const hapusMember = async (id: string) => {
+    const { error } = await supabase.from("members").delete().eq("id", id);
+    if (error) throw new Error(error.message);
+    toast.success("Member berhasil dihapus");
+    await fetchMembers();
+  };
+
   // ── Top up saldo manual 1 member ─────────────────────────
   const topupManual = async (memberId: string, nominal: number, keterangan: string, kasirId: string) => {
     // Insert riwayat
@@ -240,7 +248,7 @@ export function useMember() {
   return {
     members, loading,
     fetchMembers, fetchMemberDetail,
-    searchMember, tambahMember, updateMember,
+    searchMember, tambahMember, updateMember, hapusMember,
     topupManual, topupBulananOtomatis,
     catatTransaksiMember,
     bulanIni, tahunIni, BULAN,

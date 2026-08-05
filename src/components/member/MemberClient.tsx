@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Search, Users, Wallet, Trophy, RefreshCw } from "lucide-react";
+import { Plus, Search, Users, Wallet, Trophy, RefreshCw, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import { useMember, Member } from "@/lib/hooks/useMember";
@@ -14,7 +14,7 @@ export default function MemberClient() {
   const {
     members, loading,
     fetchMembers, tambahMember,
-    topupBulananOtomatis,
+    topupBulananOtomatis, hapusMember,
     bulanIni, tahunIni, BULAN,
   } = useMember();
 
@@ -148,45 +148,64 @@ export default function MemberClient() {
             ) : (
               <div className="divide-y divide-gray-50">
                 {filtered.map((member) => (
-                  <button
-                    key={member.id}
-                    onClick={() => setSelectedMember(member)}
-                    className="w-full flex items-center gap-4 px-5 py-4 hover:bg-gray-50 transition-colors text-left"
-                  >
-                    <div className="w-11 h-11 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold flex-shrink-0">
-                      {member.nama.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-semibold text-gray-800">{member.nama}</p>
-                        <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                          {member.kode_member}
-                        </span>
-                        {member.nipy && (
-                          <span className="text-xs font-mono text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
-                            {member.nipy}
-                          </span>
-                        )}
-                        {!member.is_active && <Badge variant="default">Nonaktif</Badge>}
+                  <div key={member.id} className="flex items-center hover:bg-gray-50 transition-colors">
+                    {/* Area klik → buka detail */}
+                    <button
+                      onClick={() => setSelectedMember(member)}
+                      className="flex-1 flex items-center gap-4 px-5 py-4 text-left min-w-0"
+                    >
+                      <div className="w-11 h-11 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold flex-shrink-0">
+                        {member.nama.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()}
                       </div>
-                      <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
-                        {member.jabatan && <span>{member.jabatan}</span>}
-                        <span>🛒 {member.total_transaksi ?? 0}x belanja</span>
-                        {member.topup_bulanan > 0 && (
-                          <span className="text-blue-500 font-medium">
-                            +{formatRupiah(member.topup_bulanan)}/bln
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-gray-800">{member.nama}</p>
+                          <span className="text-xs font-mono text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                            {member.kode_member}
                           </span>
-                        )}
+                          {member.nipy && (
+                            <span className="text-xs font-mono text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                              {member.nipy}
+                            </span>
+                          )}
+                          {!member.is_active && <Badge variant="default">Nonaktif</Badge>}
+                        </div>
+                        <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-400 flex-wrap">
+                          {member.jabatan && <span>{member.jabatan}</span>}
+                          <span>🛒 {member.total_transaksi ?? 0}x belanja</span>
+                          {member.topup_bulanan > 0 && (
+                            <span className="text-blue-500 font-medium">
+                              +{formatRupiah(member.topup_bulanan)}/bln
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={`text-sm font-bold ${member.saldo > 0 ? "text-green-600" : "text-gray-400"}`}>
+                          {formatRupiah(member.saldo)}
+                        </p>
+                        <p className="text-xs text-gray-400">saldo</p>
+                      </div>
+                    </button>
+
+                    {/* Tombol hapus */}
+                    <div className="pr-4 flex-shrink-0">
+                      <button
+                        onClick={async () => {
+                          if (!confirm(`Hapus member ${member.nama}? Semua riwayat belanja dan top up akan ikut terhapus.`)) return;
+                          try {
+                            await hapusMember(member.id);
+                          } catch (err) {
+                            toast.error((err as Error).message);
+                          }
+                        }}
+                        className="p-2 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                        title="Hapus member"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
-                    {/* Saldo */}
-                    <div className="text-right flex-shrink-0">
-                      <p className={`text-sm font-bold ${member.saldo > 0 ? "text-green-600" : "text-gray-400"}`}>
-                        {formatRupiah(member.saldo)}
-                      </p>
-                      <p className="text-xs text-gray-400">saldo</p>
-                    </div>
-                  </button>
+                  </div>
                 ))}
               </div>
             )}
