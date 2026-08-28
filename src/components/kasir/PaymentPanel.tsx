@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import toast from "react-hot-toast";
 import { useTransaction } from "@/lib/hooks/useTransaction";
 import { useMember, Member } from "@/lib/hooks/useMember";
+import ReceiptPrint from "./ReceiptPrint";
 
 interface PaymentPanelProps {
   grandTotal: number;
@@ -32,8 +33,23 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
   // Bayar pakai saldo wallet member
   const [pakaiSaldo, setPakaiSaldo] = useState(false);
 
+  // Data struk untuk print
+  const [receiptData, setReceiptData] = useState<{
+    transaction_code: string;
+    created_at: string;
+    kasir_name: string;
+    paid_amount: number;
+    change_amount: number;
+    payment_method: "cash" | "qris" | "debit";
+    bayar_saldo: number;
+  } | null>(null);
+
   const { submitTransaction, loading } = useTransaction();
   const { searchMember, catatTransaksiMember } = useMember();
+  // Ambil profil toko dari localStorage (diset di halaman Pengaturan)
+  const storeProfile = typeof window !== "undefined"
+    ? JSON.parse(localStorage.getItem("daimart_store_profile") ?? "{}")
+    : {};
 
   // Hitung berapa dibayar saldo vs tunai
   const saldoTersedia = selectedMember?.saldo ?? 0;
@@ -115,8 +131,19 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
         });
       }
 
-      resetForm();
-      onSuccess();
+      // Simpan data struk → trigger print otomatis
+      setReceiptData({
+        transaction_code: trx?.transaction_code ?? "-",
+        created_at: trx?.created_at ?? new Date().toISOString(),
+        kasir_name: "Kasir",
+        paid_amount: pakaiSaldo && bayarSaldo >= grandTotal
+          ? grandTotal
+          : (paymentMethod === "cash" ? paid : grandTotal),
+        change_amount: pakaiSaldo && bayarSaldo >= grandTotal ? 0 : Math.max(0, change),
+        payment_method: pakaiSaldo && bayarSaldo >= grandTotal ? "cash" : paymentMethod,
+        bayar_saldo: bayarSaldo,
+      });
+      // onSuccess dipanggil setelah print selesai (di onDone ReceiptPrint)
     } catch (err) {
       toast.error((err as Error).message || "Transaksi gagal");
     }
@@ -373,6 +400,28 @@ export default function PaymentPanel({ grandTotal, cart, kasirId, onSuccess }: P
           <RotateCcw className="w-3.5 h-3.5" /> Reset
         </button>
       </div>
+
+      {/* Struk print — muncul otomatis setelah transaksi */}
+      {receiptData && (
+        <ReceiptPrint
+          data={{
+            ...receiptData,
+            cart,
+            total_amount: grandTotal,
+            is_member: isMember,
+            member_name: selectedMember?.nama,
+          }}
+          storeName={storeProfile.store_name || "DaiMart"}
+          storeAddress={storeProfile.address}
+          storePhone={storeProfile.phone}
+          footerNote={storeProfile.footer_note}
+          onDone={() => {
+            setReceiptData(null);
+            resetForm();
+            onSuccess();
+          }}
+        />
+      )}
     </div>
   );
 }
